@@ -1,0 +1,28 @@
+{
+  "name": "card-pro-max",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "test": "node --test \"lib/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit",
+    "import:rcbc": "node scripts/import-rcbc.ts"
+  },
+  "dependencies": {
+    "next": "16.4.1",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.4.1",
+    "typescript": "^5"
+  },
+  "type": "module"
+}

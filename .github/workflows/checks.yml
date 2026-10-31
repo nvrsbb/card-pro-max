@@ -1,0 +1,25 @@
+name: checks
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          # 24 matches Vercel's runtime; the tests run .ts files directly, which needs 22.18 or later.
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      # PageProps and LayoutProps are generated into .next/, which a fresh checkout doesn't have.
+      - run: npx next typegen
+      - run: npx tsc --noEmit -p .
+      - run: npx eslint .

@@ -3,11 +3,12 @@
 // One promo in the side panel: what the bank says, where we are with it, and the spending toward its minimum.
 // Opened from every page that lists promos.
 import { useState, type FormEvent } from "react";
-import { BANKS, mutate, newId, STATUSES, STATUS_LABEL, type Ledger, type Promo, type Status } from "@/lib/client";
+import { BANKS, cardName, mutate, newId, STATUSES, STATUS_LABEL, type Ledger, type Promo, type Status } from "@/lib/client";
 import { manilaToday, shortDate } from "@/lib/dates";
 import { money, parseAmount } from "@/lib/format";
 import { cardsFor, guessTerms, progress, spendOn, trackingOf } from "@/lib/promos";
-import { Drawer, Ends, focusHere, KindChip, Meter, networkNames, StatusChip } from "./components";
+import { allCards, holders, nameOf, ownedCards, ownerNames } from "@/lib/cards";
+import { CardOptions, Drawer, Ends, focusHere, KindChip, Meter, networkNames, StatusChip } from "./components";
 
 export function PromoPanel({ ledger, promoId, onClose, onEdit }: { ledger: Ledger; promoId: string | null; onClose: () => void; onEdit?: (promo: Promo) => void }) {
   const promo = promoId ? ledger.promos.find((p) => p.id === promoId) : undefined;
@@ -19,7 +20,8 @@ export function PromoPanel({ ledger, promoId, onClose, onEdit }: { ledger: Ledge
 function PromoBody({ ledger, promo, onEdit, onDeleted }: { ledger: Ledger; promo: Promo; onEdit?: (promo: Promo) => void; onDeleted: () => void }) {
   const today = manilaToday();
   const tracking = trackingOf(ledger, promo.id);
-  const ours = cardsFor(promo, ledger.cards);
+  const ours = cardsFor(promo, ownedCards(ledger.cards));
+  const anyOurs = ownedCards(ledger.cards).length > 0;
   const [armed, setArmed] = useState(false);
   return <>
     <section className="promo-head">
@@ -31,7 +33,7 @@ function PromoBody({ ledger, promo, onEdit, onDeleted }: { ledger: Ledger; promo
         <dt>Period</dt><dd>{promo.period || (promo.starts || promo.ends ? `${shortDate(promo.starts, today) || "…"} – ${shortDate(promo.ends, today) || "…"}` : "Not stated")}</dd>
         <dt>Ends</dt><dd><Ends promo={promo} today={today} /></dd>
         <dt>Networks</dt><dd>{networkNames(promo.networks)}</dd>
-        <dt>Our cards</dt><dd>{ledger.cards.length === 0 ? <span className="muted">Add your cards on the Cards page</span> : ours.length ? ours.map((c) => c.name).join(", ") : <span className="muted">None of our cards</span>}</dd>
+        <dt>Our cards</dt><dd>{!anyOurs ? <span className="muted">Tag your cards on the Cards page</span> : ours.length ? ours.map((c) => `${cardName(c)} (${ownerNames(c, holders(ledger))})`).join(", ") : <span className="muted">None of our cards</span>}</dd>
         {promo.permit && <><dt>DTI permit</dt><dd>{promo.permit}</dd></>}
         {promo.url && <><dt>Source</dt><dd><a href={promo.url} target="_blank" rel="noreferrer">{promo.manual ? promo.url : `On ${BANKS[promo.bank]}'s site ↗`}</a></dd></>}
       </dl>
@@ -56,7 +58,7 @@ function PromoBody({ ledger, promo, onEdit, onDeleted }: { ledger: Ledger; promo
 function TrackForm({ ledger, promo }: { ledger: Ledger; promo: Promo }) {
   const tracking = trackingOf(ledger, promo.id);
   const guess = guessTerms(`${promo.summary}\n${promo.details}`);
-  const ours = cardsFor(promo, ledger.cards);
+  const ours = cardsFor(promo, ownedCards(ledger.cards));
   const [status, setStatus] = useState<Status>(tracking?.status ?? "joined");
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
@@ -73,8 +75,10 @@ function TrackForm({ ledger, promo }: { ledger: Ledger; promo: Promo }) {
     setSaved(ok);
   }
 
-  // Cards the promo fits come first; the rest are still there, in case the bank's networks list is off.
-  const others = ledger.cards.filter((c) => !ours.includes(c));
+  // Our cards the promo fits come first; then our others, in case the bank's networks list is off; then the rest
+  // (to track a promo for a card we might get).
+  const others = ownedCards(ledger.cards).filter((c) => !ours.includes(c));
+  const rest = allCards(ledger).filter((c) => c.owners.length === 0);
   return <section>
     <h3>Where we are {tracking && <span className="muted">since {shortDate(tracking.updated)}</span>}</h3>
     <form className="form" onSubmit={save} onChange={() => setSaved(false)}>
@@ -84,8 +88,9 @@ function TrackForm({ ledger, promo }: { ledger: Ledger; promo: Promo }) {
       <label>Card
         <select name="card" defaultValue={tracking?.card ?? (ours.length === 1 ? ours[0].id : "")}>
           <option value="">Not decided</option>
-          {ours.length > 0 && <optgroup label="Fits this promo">{ours.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</optgroup>}
-          {others.length > 0 && <optgroup label="Other cards">{others.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</optgroup>}
+          {ours.length > 0 && <optgroup label="Ours that fit this promo">{ours.map((c) => <option key={c.id} value={c.id}>{cardName(c)}</option>)}</optgroup>}
+          {others.length > 0 && <optgroup label="Our other cards">{others.map((c) => <option key={c.id} value={c.id}>{cardName(c)}</option>)}</optgroup>}
+          {rest.length > 0 && <optgroup label="Not ours">{rest.map((c) => <option key={c.id} value={c.id}>{cardName(c)}</option>)}</optgroup>}
         </select>
       </label>
       <div className="row">
@@ -110,7 +115,7 @@ function SpendSection({ ledger, promo }: { ledger: Ledger; promo: Promo }) {
   const tracking = trackingOf(ledger, promo.id)!;
   const { spent, goal, left, share } = progress(ledger, promo.id);
   const rows = spendOn(ledger, promo.id).sort((a, b) => b.date.localeCompare(a.date) || b.created.localeCompare(a.created));
-  const cardName = (id: string) => ledger.cards.find((c) => c.id === id)?.name ?? (id ? "A removed card" : "");
+  const name = (id: string) => nameOf(ledger, id);
   const [error, setError] = useState("");
 
   function add(event: FormEvent<HTMLFormElement>) {
@@ -133,7 +138,7 @@ function SpendSection({ ledger, promo }: { ledger: Ledger; promo: Promo }) {
     {rows.length > 0 && <table className="spend-mini"><tbody>
       {rows.map((s) => <tr key={s.id}>
         <td>{shortDate(s.date)}</td>
-        <td className="wrap">{s.note || <span className="muted">{cardName(s.card) || "—"}</span>}{s.note && s.card && <span className="sub">{cardName(s.card)}</span>}</td>
+        <td className="wrap">{s.note || <span className="muted">{name(s.card) || "—"}</span>}{s.note && s.card && <span className="sub">{name(s.card)}</span>}</td>
         <td className="num">{money(s.amount)}</td>
         <td><button type="button" className="icon-btn" aria-label="Delete this spending" title="Delete" onClick={() => mutate({ type: "deleteSpend", id: s.id })}>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg></button></td>
@@ -147,7 +152,7 @@ function SpendSection({ ledger, promo }: { ledger: Ledger; promo: Promo }) {
       <div className="row">
         <label>Card <select name="card" defaultValue={tracking.card}>
           <option value="">—</option>
-          {ledger.cards.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          <CardOptions ledger={ledger} keep={tracking.card} />
         </select></label>
         <label>Note <input name="note" maxLength={500} placeholder="Where, what" /></label>
       </div>

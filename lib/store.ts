@@ -4,7 +4,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { applyOp, BANKS, changedFiles, commitMessage, fromFiles, isLedgerFile, toFiles, type Bank, type Ledger, type Login, type Op } from "./ledger.ts";
+import { applyOp, BANKS, changedFiles, commitMessage, fromFiles, isLedgerFile, SETTINGS_FILE, toFiles, whoIs, type Bank, type Ledger, type Login, type Op } from "./ledger.ts";
 import { describeImport, mergeImport } from "./promos.ts";
 import type { Detail, Listed } from "./rcbc.ts";
 import { applyTrackerOp, describeTrackerOp, readTracker, TRACKER_FILE, writeTracker, type Tracker, type TrackerOp } from "./tracker.ts";
@@ -151,7 +151,7 @@ export type ImportSummary = { added: number; updated: number; gone: number; remo
 
 /**
  * Merges a check of a bank's list into the catalog as one commit, retrying like saveOp. `listed` and `details` were
- * fetched before (lib/import.ts), so a retry doesn't fetch again.
+ * fetched before (lib/import.ts), so a retry doesn't fetch again. `by` is a login, or what ran it ("daily check").
  */
 export async function saveImport(bank: Bank, listed: Listed[], details: Record<string, Detail>, today: string, url: (slug: string) => string,
   by: string): Promise<{ ledger: Ledger; summary: ImportSummary }> {
@@ -164,7 +164,8 @@ export async function saveImport(bank: Bank, listed: Listed[], details: Record<s
     const summary = { added: result.added.length, updated: result.updated.length, gone: result.gone.length, removed: result.removed.length };
     const changed = changedFiles(files, toFiles(next));
     if (Object.keys(changed).length === 0) return { ledger: next, summary };
-    if (await store.write(changed, `${describeImport(BANKS[bank], result)} (by ${by})`, version)) return { ledger: next, summary };
+    const who = by === "admin" || by === "member" ? whoIs(before, by) : by;
+    if (await store.write(changed, `${describeImport(BANKS[bank], result)} (by ${who})`, version)) return { ledger: next, summary };
   }
   throw new LedgerError("The ledger kept changing while saving. Try again.");
 }
@@ -172,6 +173,7 @@ export async function saveImport(bank: Bank, listed: Listed[], details: Record<s
 // ---------- feature tracker (admin) ----------
 
 const isTrackerFile = (p: string) => p === TRACKER_FILE;
+const isTrackerOrSettings = (p: string) => p === TRACKER_FILE || p === SETTINGS_FILE;
 
 export async function loadTracker(): Promise<Tracker> {
   return readTracker((await backend().read(isTrackerFile)).files[TRACKER_FILE]);
@@ -182,10 +184,11 @@ export async function saveTrackerOp(op: TrackerOp, login?: Login | null): Promis
   const store = backend();
   const today = new Date().toISOString().slice(0, 10);
   for (let attempt = 0; attempt < 4; attempt++) {
-    const { files, version } = await store.read(isTrackerFile);
+    const { files, version } = await store.read(isTrackerOrSettings);
     const before = readTracker(files[TRACKER_FILE]);
     const next = applyTrackerOp(before, op, today);
-    const message = login ? `${describeTrackerOp(before, op)} (by ${login})` : describeTrackerOp(before, op);
+    const who = login && whoIs(fromFiles({ [SETTINGS_FILE]: files[SETTINGS_FILE] ?? "" }), login);
+    const message = who ? `${describeTrackerOp(before, op)} (by ${who})` : describeTrackerOp(before, op);
     if (await store.write({ [TRACKER_FILE]: writeTracker(next) }, message, version)) return next;
   }
   throw new LedgerError("The tracker kept changing while saving. Try again.");

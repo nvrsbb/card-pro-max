@@ -11,8 +11,10 @@ minimum spend, and the rewards still to come. Starting with **RCBC**; built so m
   Skipped, with the card, minimum spend and reward (guessed from the mechanics to start with), and log spending toward it.
   **Check for new promos** reads RCBC's promo page now; it's also checked every morning.
 - **Spending**: everything spent toward a promo's minimum.
-- **Cards**: the cards we hold (one tap for RCBC's premium cards), each with the promos it can use.
-- **Settings**: light or dark, and where the data lives.
+- **Cards**: every RCBC card, each tagged by whose it is (Arvs, Ayette, both) or Not ours. Ours decide what Promos
+  shows (all of ours, or one person's); a card that isn't ours shows what it would get. Add one by bank, type and
+  network (RCBC, Flex, Visa: "RCBC Flex Visa").
+- **Settings**: light or dark, who's who (each person and the login they use; their edits say "by" them), and where the data lives.
 - **Tracker** (admin only): what to build next.
 
 ## Where the data lives
@@ -22,7 +24,8 @@ This repo is public and holds no personal data. Everything is plain files in a s
 
 ```
 promos/rcbc.json     the catalog: every promo seen on rcbccredit.com/promos (and any added by hand)
-cards.csv            id,bank,name,network,note
+settings.json        {"people": [{"id", "name", "login"}]}   who we are, and which login (admin or member) each uses
+cards.csv            id,bank,type,network,owners                 (owners: person ids, space-separated; none: not ours)
 tracking.csv         promo,status,card,goal,reward,note,updated      (status: watching, joined, earned, credited, skipped)
 spend/2026.csv       id,date,promo,card,amount,note,created          (one file per year)
 tracker.json         the admin's feature tracker (once it's first edited)
@@ -44,8 +47,8 @@ bank takes down as gone. Untracked promos are dropped 180 days after they end; t
 | `LEDGER_REPO` | `owner/name` of the private ledger repo, e.g. `nvrsbb/card-pro-max-ledger` |
 | `LEDGER_BRANCH` | Branch to read and write. Default `main` |
 | `LEDGER_GITHUB_TOKEN` | Fine-grained token with access to **only** the ledger repo and **Contents: Read and write** |
-| `DASHBOARD_PASSWORD` | The login password. The only thing protecting your data, so make it long |
-| `ADMIN_PASSWORD` | Optional. The owner's own password: logs in as admin, which adds the Tracker |
+| `DASHBOARD_PASSWORD` | The household password (the `member` login). The only thing protecting your data, so make it long |
+| `ADMIN_PASSWORD` | The owner's own password: logs in as `admin`, which adds the Tracker |
 | `SESSION_SECRET` | Random string that signs the login cookie (`openssl rand -hex 32`) |
 | `CRON_SECRET` | Random string; Vercel sends it with the daily check (`vercel.json` crons). Without it the daily check is off |
 

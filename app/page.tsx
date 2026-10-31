@@ -4,6 +4,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useLedger, type Ledger, type Promo } from "@/lib/client";
+import { nameOf, ownedCards } from "@/lib/cards";
 import { daysBetween, manilaToday } from "@/lib/dates";
 import { money } from "@/lib/format";
 import { byEnding, cardsFor, daysLeft, isNew, isOn, progress, rewardTotals, trackingOf } from "@/lib/promos";
@@ -19,11 +20,11 @@ export default function Overview() {
   if (!ledger) return <section className="page"><p className="muted">Loading…</p></section>;
   const today = manilaToday();
   const promo = (id: string) => ledger.promos.find((p) => p.id === id);
-  const cardName = (id: string) => ledger.cards.find((c) => c.id === id)?.name ?? "";
   const of = (status: string) => ledger.tracking.filter((t) => t.status === status).map((t) => promo(t.promo)).filter((p): p is Promo => !!p).sort(byEnding);
   const joined = of("joined");
   const earned = of("earned");
-  const forUs = ledger.promos.filter((p) => isOn(p, today) && (ledger.cards.length === 0 || cardsFor(p, ledger.cards).length > 0));
+  const ours = ownedCards(ledger.cards);
+  const forUs = ledger.promos.filter((p) => isOn(p, today) && (ours.length === 0 || cardsFor(p, ours).length > 0));
   const fresh = forUs.filter((p) => isNew(p, ledger.promos, today));
   const soon = forUs.filter((p) => { const left = daysLeft(p, today); return left !== null && left <= SOON_DAYS && (trackingOf(ledger, p.id)?.status ?? "watching") === "watching"; }).sort(byEnding);
   const { credited, waiting } = rewardTotals(ledger, today.slice(0, 4));
@@ -35,7 +36,7 @@ export default function Overview() {
       <Card label="Joined" value={String(joined.length)} hint={joined.length ? `${reached} reached the minimum · ${money(expected)} in rewards` : "Track a promo from Promos"} />
       <Card label="Earned, still to be credited" value={money(waiting)} hint={`${earned.length} promo${earned.length === 1 ? "" : "s"}`} />
       <Card label={`Credited in ${today.slice(0, 4)}`} value={money(credited)} />
-      <Card label={ledger.cards.length ? "On now for our cards" : "On now"} value={String(forUs.length)} hint={fresh.length ? `${fresh.length} new this week` : undefined} />
+      <Card label={ours.length ? "On now for our cards" : "On now"} value={String(forUs.length)} hint={fresh.length ? `${fresh.length} new this week` : undefined} />
     </div>
     <GettingStarted ledger={ledger} />
     <div className="workspace split">
@@ -60,7 +61,7 @@ export default function Overview() {
                 {share !== null ? <span>{money(spent)} of {money(goal)}{left > 0 ? ` · ${money(left)} to go` : " · minimum reached ✓"}</span> : spent > 0 && <span>{money(spent)} spent</span>}
                 {behind && <span className="ends soon">behind pace</span>}
                 {t.reward > 0 && <span>reward {money(t.reward)}</span>}
-                {t.card && <span>{cardName(t.card)}</span>}
+                {t.card && <span>{nameOf(ledger, t.card)}</span>}
               </div>
             </li>;
           })}</ul>
@@ -96,12 +97,13 @@ export default function Overview() {
 
 /** Until there are cards and promos: the two steps that make the rest work. */
 function GettingStarted({ ledger }: { ledger: Ledger }) {
-  if (ledger.cards.length > 0 && ledger.promos.length > 0) return null;
+  const ours = ownedCards(ledger.cards).length;
+  if (ours > 0 && ledger.promos.length > 0) return null;
   return <div className="panel">
     <div className="panel-head"><h2>Getting started</h2></div>
     <ol className="note getting-started">
       <li className={ledger.promos.length ? "muted" : ""}>{ledger.promos.length ? "✓ Promos are in." : <>On <Link href="/promos">Promos</Link>, tap <b>Check for new promos</b> to bring in everything on RCBC&apos;s site.</>}</li>
-      <li className={ledger.cards.length ? "muted" : ""}>{ledger.cards.length ? "✓ Cards are in." : <>On <Link href="/cards">Cards</Link>, add the cards you hold, so Promos shows only what they can use.</>}</li>
+      <li className={ours ? "muted" : ""}>{ours ? "✓ Cards are in." : <>On <Link href="/cards">Cards</Link>, tag the cards you each hold, so Promos shows only what they can use.</>}</li>
     </ol>
   </div>;
 }

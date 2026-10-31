@@ -4,7 +4,7 @@ don't see the owner's Mac, so this file is the whole briefing).
 
 ## Who it's for
 
-- The owner is Arvs (GitHub `nvrsbb`), in the Philippines; the currency is PHP and dates are Manila time (UTC+8,
+- The household is Arvs (the owner, GitHub `nvrsbb`, the admin login) and Ayette (the member login), in the Philippines; the currency is PHP and dates are Manila time (UTC+8,
   `manilaToday` in `lib/dates.ts`). Use they/them unless told otherwise.
 - The owner thinks from first principles: explain trade-offs plainly, recommend one option, keep replies short and concrete.
 
@@ -30,6 +30,10 @@ don't see the owner's Mac, so this file is the whole briefing).
   `isOp` (validation), plus a test. Changing a file's columns: make `fromFiles` read both formats, deploy, then migrate the ledger.
 - `lib/store.ts` reads and writes the ledger through the GitHub API (one commit per edit, retried if the branch moved),
   or a local folder in development. `lib/client.ts` is the browser's copy: `mutate(op)` shows an edit at once and saves in order.
+- People (`settings.json` `people`: id, name, login) live in the ledger, never in this repo. Commits end "(by Name)" (`whoIs`).
+- Cards (`lib/cards.ts`): a card is bank + type + network (`cardId`, `cardName`: "RCBC Flex Visa") with `owners` (person ids;
+  none: not ours). `RCBC_CARDS` is the bank's list, shown untagged until someone tags one (`tagOp` adds it then).
+  "Our cards" is always `ownedCards`, never `ledger.cards` as a whole.
 - Banks: `BANKS` in `lib/ledger.ts`. Each bank has a pure parser (`lib/rcbc.ts`: `parseList`, `parseDetail`, tested on
   synthetic HTML shaped like the real pages) and an importer (`lib/import.ts`). `mergeImport` (`lib/promos.ts`) is
   bank-agnostic. A new bank = a parser + tests, an importer, a `BANKS` entry, and a call from `/api/import` and `/api/cron`.

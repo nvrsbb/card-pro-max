@@ -6,6 +6,7 @@ import { Suspense, useDeferredValue, useState, type FormEvent } from "react";
 import { BANKS, checkForPromos, KINDS, KIND_LABEL, mutate, NETWORKS, NETWORK_LABEL, type CheckResult, type Kind, type Ledger, type Network, type Promo, type PromoFields, useLedger } from "@/lib/client";
 import { manilaToday } from "@/lib/dates";
 import { byEnding, cardsFor, hasEnded, isNew, isOn, isUpcoming, trackingOf } from "@/lib/promos";
+import { holders, ownedCards, possessive } from "@/lib/cards";
 import { Drawer, Ends, focusHere, KindChip, networkNames, StatusChip } from "../components";
 import { PromoPanel } from "../promo-panel";
 
@@ -38,7 +39,7 @@ function Promos() {
   const asked = params.get("show") ?? "";
   const [show, setShow] = useState<Show>(asked in SHOWS ? asked as Show : "on");
   const [kind, setKind] = useState<Kind | "">("");
-  const [mine, setMine] = useState<boolean | null>(null); // null: our cards once we have some
+  const [whose, setWhose] = useState<string | null>(null); // "ours", a person's id, or "any"; null: ours once we have some
   const [open, setOpen] = useState<string | null>(params.get("promo"));
   const [editing, setEditing] = useState<Promo | null | undefined>(undefined); // undefined: closed; null: new
   const [checking, setChecking] = useState(false);
@@ -46,9 +47,11 @@ function Promos() {
 
   if (!ledger) return <section className="page"><p className="muted">Loading…</p></section>;
   const today = manilaToday();
-  const forOurs = (mine ?? ledger.cards.length > 0) && ledger.cards.length > 0;
+  const anyOurs = ownedCards(ledger.cards).length > 0;
+  const forWhom = anyOurs ? whose ?? "ours" : "any";
+  const theirs = forWhom === "any" ? [] : ownedCards(ledger.cards, forWhom === "ours" ? undefined : forWhom);
   const list = ledger.promos
-    .filter((p) => shown(ledger, p, show, today) && (!kind || p.kind === kind) && (!forOurs || cardsFor(p, ledger.cards).length > 0) && matches(p, q))
+    .filter((p) => shown(ledger, p, show, today) && (!kind || p.kind === kind) && (forWhom === "any" || cardsFor(p, theirs).length > 0) && matches(p, q))
     .sort(show === "new" ? (a, b) => b.added.localeCompare(a.added) || byEnding(a, b) : byEnding);
 
   async function check() {
@@ -70,9 +73,10 @@ function Promos() {
           <option value="">Every kind</option>
           {KINDS.map((k) => <option key={k} value={k}>{KIND_LABEL[k]}</option>)}
         </select>
-        {ledger.cards.length > 0 && <select aria-label="For which cards" value={forOurs ? "ours" : "all"} onChange={(e) => setMine(e.target.value === "ours")}>
+        {anyOurs && <select aria-label="For whose cards" value={forWhom} onChange={(e) => setWhose(e.target.value)}>
           <option value="ours">For our cards</option>
-          <option value="all">For any card</option>
+          {ledger.people.length > 1 && holders(ledger).map((x) => <option key={x.id} value={x.id}>For {possessive(x.name)} cards</option>)}
+          <option value="any">For any card</option>
         </select>}
       </div>
       <div className="head-actions">

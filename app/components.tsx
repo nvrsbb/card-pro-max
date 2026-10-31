@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, type ReactNode } from "react";
-import { KIND_LABEL, NETWORK_LABEL, STATUS_LABEL, type Kind, type Network, type Promo, type Status } from "@/lib/client";
+import { cardName, KIND_LABEL, NETWORK_LABEL, STATUS_LABEL, type Kind, type Ledger, type Network, type Promo, type Status } from "@/lib/client";
+import { allCards, ownedCards } from "@/lib/cards";
 import { shortDate } from "@/lib/dates";
 import { daysLeft } from "@/lib/promos";
 
@@ -62,4 +63,11 @@ export function Ends({ promo, today }: { promo: Promo; today: string }) {
   if (left === 0) return <span className="ends today">Ends today</span>;
   if (left <= 7) return <span className="ends soon">{left} day{left === 1 ? "" : "s"} left</span>;
   return <span>{shortDate(promo.ends, today)}</span>;
+}
+
+/** Options for picking a card spent on: our cards, plus `keep` (the one already chosen) if it isn't ours any more. */
+export function CardOptions({ ledger, keep }: { ledger: Ledger; keep?: string }) {
+  const ours = ownedCards(ledger.cards);
+  const kept = keep && !ours.some((c) => c.id === keep) ? allCards(ledger).find((c) => c.id === keep) : undefined;
+  return <>{[...ours, ...(kept ? [kept] : [])].map((c) => <option key={c.id} value={c.id}>{cardName(c)}</option>)}</>;
 }

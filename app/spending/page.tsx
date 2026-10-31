@@ -6,7 +6,8 @@ import { mutate, newId, type Ledger, type Spend, useLedger } from "@/lib/client"
 import { manilaToday, shortDate } from "@/lib/dates";
 import { money, parseAmount } from "@/lib/format";
 import { OPEN, trackingOf } from "@/lib/promos";
-import { Card, Drawer, focusHere } from "../components";
+import { nameOf } from "@/lib/cards";
+import { Card, CardOptions, Drawer, focusHere } from "../components";
 import { PromoPanel } from "../promo-panel";
 
 export default function SpendingPage() {
@@ -17,7 +18,7 @@ export default function SpendingPage() {
   if (!ledger) return <section className="page"><p className="muted">Loading…</p></section>;
   const today = manilaToday();
   const title = (id: string) => ledger.promos.find((p) => p.id === id)?.title ?? "A removed promo";
-  const cardName = (id: string) => ledger.cards.find((c) => c.id === id)?.name ?? (id ? "A removed card" : "");
+  const cardName = (id: string) => nameOf(ledger, id);
   const rows = ledger.spend.filter((s) => !promoFilter || s.promo === promoFilter)
     .sort((a, b) => b.date.localeCompare(a.date) || b.created.localeCompare(a.created));
   const month = today.slice(0, 7);
@@ -101,7 +102,7 @@ function SpendForm({ ledger, spend, promo, onDone }: { ledger: Ledger; spend: Sp
     </div>
     <label>Card <select name="card" key={promoId} defaultValue={spend?.card ?? trackingOf(ledger, promoId)?.card ?? ""}>
       <option value="">—</option>
-      {ledger.cards.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+      <CardOptions ledger={ledger} keep={spend?.card} />
     </select></label>
     <label>Note <input name="note" maxLength={500} defaultValue={spend?.note} placeholder="Where, what" /></label>
     {error && <p className="down" role="alert">{error}</p>}

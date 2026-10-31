@@ -217,6 +217,10 @@ td.title-cell button.link:hover { color: var(--accent); }
 .chip.status.earned { color: var(--success); border-color: var(--success); }
 .chip.status.credited { background: var(--success); border-color: var(--success); color: var(--panel); }
 .chip.status.skipped { border-style: dashed; }
+.tags { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+button.tag { padding: 2px 10px; border-radius: 999px; font-size: 12px; color: var(--text-muted); }
+button.tag:hover { border-color: var(--accent); color: var(--accent); }
+button.tag[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
 .chip.new { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
 .ends { white-space: nowrap; }
 .ends.soon { color: var(--accent); font-weight: 600; }

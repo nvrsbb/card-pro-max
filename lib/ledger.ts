@@ -2,7 +2,8 @@
 //
 // Files (in the private ledger repo, one commit per edit):
 //   promos/<bank>.json   the catalog, one file per bank (imported from the bank's site, plus promos added by hand)
-//   cards.csv            our cards: id,bank,name,network,note
+//   settings.json        who we are: {"people": [{"id", "name", "login"}]}, each person with the login they use
+//   cards.csv            cards, ours or not: id,bank,type,network,owners (type: "Flex", "Gold"…; owners: person ids, space-separated; none: not ours)
 //   tracking.csv         what we're doing about a promo: promo,status,card,goal,reward,note,updated
 //   spend/YYYY.csv       spending toward a promo's minimum: id,date,promo,card,amount,note,created
 import { readCsv, toCsv } from "./csv.ts";
@@ -33,7 +34,17 @@ export type Promo = {
   added: string; updated: string; checked?: string; gone?: string; manual?: boolean;
 };
 
-export type Card = { id: string; bank: Bank; name: string; network: Network; note: string };
+/** Someone in the household, and the login (admin or member password) they use, so commits can say who made them. */
+export type Person = { id: string; name: string; login: Login };
+
+/**
+ * A card by its bank, type and network (RCBC, Flex, Visa: "RCBC Flex Visa"), and who holds one (`owners`, person ids);
+ * with no owners it's not ours, kept to see what it would get. Its id comes from those three (`cardId`).
+ */
+export type Card = { id: string; bank: Bank; type: string; network: Network; owners: string[] };
+
+export const cardId = (bank: Bank, type: string, network: Network) => `${bank}-${type}-${network}`.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+export const cardName = (c: Pick<Card, "bank" | "type" | "network">) => `${BANKS[c.bank]} ${c.type} ${NETWORK_LABEL[c.network]}`;
 
 /**
  * Where we are with a promo: watching it, joined (registered, or spending toward it), earned (met the terms),
@@ -47,17 +58,18 @@ export type Tracking = { promo: string; status: Status; card: string; goal: numb
 /** Money spent toward a promo, on one of our cards. `created` orders a day's rows. */
 export type Spend = { id: string; date: string; promo: string; card: string; amount: number; note: string; created: string };
 
-export type Ledger = { promos: Promo[]; cards: Card[]; tracking: Tracking[]; spend: Spend[] };
+export type Ledger = { people: Person[]; promos: Promo[]; cards: Card[]; tracking: Tracking[]; spend: Spend[] };
 
-export const emptyLedger = (): Ledger => ({ promos: [], cards: [], tracking: [], spend: [] });
+export const emptyLedger = (): Ledger => ({ people: [], promos: [], cards: [], tracking: [], spend: [] });
 
 // ---------- files ----------
 
+export const SETTINGS_FILE = "settings.json";
 export const CARDS_FILE = "cards.csv";
 export const TRACKING_FILE = "tracking.csv";
 export const catalogFile = (bank: Bank) => `promos/${bank}.json`;
 
-export const isLedgerFile = (p: string) => p === CARDS_FILE || p === TRACKING_FILE || /^promos\/[a-z0-9-]+\.json$/.test(p) || /^spend\/\d{4}\.csv$/.test(p);
+export const isLedgerFile = (p: string) => p === SETTINGS_FILE || p === CARDS_FILE || p === TRACKING_FILE || /^promos\/[a-z0-9-]+\.json$/.test(p) || /^spend\/\d{4}\.csv$/.test(p);
 
 const num = (v: string) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 const pick = <T extends string>(v: string, all: readonly T[], fallback: T): T => (all.includes(v as T) ? (v as T) : fallback);
@@ -68,7 +80,11 @@ export function fromFiles(files: Record<string, string>): Ledger {
     if (name.startsWith("promos/") && text.trim()) ledger.promos.push(...(JSON.parse(text) as Promo[]));
     else if (name.startsWith("spend/")) ledger.spend.push(...readCsv(text).map((r) => ({ id: r.id, date: r.date, promo: r.promo, card: r.card, amount: num(r.amount), note: r.note, created: r.created })));
   }
-  ledger.cards = readCsv(files[CARDS_FILE] ?? "").map((r) => ({ id: r.id, bank: isBank(r.bank) ? r.bank : "rcbc", name: r.name, network: pick(r.network, NETWORKS, "visa"), note: r.note }));
+  const settings = files[SETTINGS_FILE]?.trim() ? JSON.parse(files[SETTINGS_FILE]) as { people?: Person[] } : {};
+  ledger.people = (settings.people ?? []).map((x) => ({ id: String(x.id), name: String(x.name), login: x.login === "member" ? "member" : "admin" }));
+  // Cards from before owners and types (a name, no owners column) were all ours, everyone's, named in full.
+  ledger.cards = readCsv(files[CARDS_FILE] ?? "").map((r) => ({ id: r.id, bank: isBank(r.bank) ? r.bank : "rcbc", type: r.type ?? r.name ?? "", network: pick(r.network, NETWORKS, "visa"),
+    owners: r.owners === undefined ? ledger.people.map((x) => x.id) : r.owners.split(" ").filter(Boolean) }));
   ledger.tracking = readCsv(files[TRACKING_FILE] ?? "").map((r) => ({ promo: r.promo, status: pick(r.status, STATUSES, "watching"), card: r.card, goal: num(r.goal), reward: num(r.reward), note: r.note, updated: r.updated }));
   return ledger;
 }
@@ -81,7 +97,8 @@ export function toFiles(ledger: Ledger): Record<string, string> {
   for (const bank of new Set(ledger.promos.map((p) => p.bank))) {
     files[catalogFile(bank)] = JSON.stringify(ledger.promos.filter((p) => p.bank === bank).sort(byId), null, 2) + "\n";
   }
-  files[CARDS_FILE] = toCsv(["id", "bank", "name", "network", "note"], [...ledger.cards].sort(byId).map((c) => [c.id, c.bank, c.name, c.network, c.note]));
+  if (ledger.people.length > 0) files[SETTINGS_FILE] = JSON.stringify({ people: ledger.people }, null, 2) + "\n";
+  files[CARDS_FILE] = toCsv(["id", "bank", "type", "network", "owners"], [...ledger.cards].sort(byId).map((c) => [c.id, c.bank, c.type, c.network, c.owners.join(" ")]));
   files[TRACKING_FILE] = toCsv(["promo", "status", "card", "goal", "reward", "note", "updated"],
     [...ledger.tracking].sort((a, b) => a.promo.localeCompare(b.promo)).map((t) => [t.promo, t.status, t.card, String(t.goal), String(t.reward), t.note, t.updated]));
   for (const year of new Set(ledger.spend.map((s) => s.date.slice(0, 4)))) {
@@ -147,6 +164,7 @@ export function applyOp(ledger: Ledger, op: Op): Ledger {
     case "addCard":
       return { ...ledger, cards: [...ledger.cards.filter((c) => c.id !== op.id), { id: op.id, ...op.fields }] };
     case "updateCard":
+      if (!ledger.cards.some((c) => c.id === op.id)) throw new EditError("That card isn't in the list.");
       return { ...ledger, cards: ledger.cards.map((c) => (c.id === op.id ? { ...c, ...op.changes } : c)) };
     case "deleteCard":
       // Its spending and tracking keep the id, shown as "a removed card", so no history is lost.
@@ -169,13 +187,13 @@ export function applyOp(ledger: Ledger, op: Op): Ledger {
 /** The git commit message for an edit, without amounts (the app repo is public; the ledger's history stays plain). */
 export function describeOp(ledger: Ledger, op: Op): string {
   const promo = (id: string) => ledger.promos.find((p) => p.id === id)?.title ?? id;
-  const card = (id: string) => ledger.cards.find((c) => c.id === id)?.name ?? "a card";
+  const card = (id: string) => { const c = ledger.cards.find((x) => x.id === id); return c ? cardName(c) : "a card"; };
   const spend = (id: string) => ledger.spend.find((s) => s.id === id);
   switch (op.type) {
     case "addPromo": return `Add promo ${op.fields.title}`;
     case "updatePromo": return `Edit promo ${promo(op.id)}`;
     case "deletePromo": return `Delete promo ${promo(op.id)}`;
-    case "addCard": return `Add card ${op.fields.name}`;
+    case "addCard": return `Add card ${cardName(op.fields)}`;
     case "updateCard": return `Edit card ${card(op.id)}`;
     case "deleteCard": return `Remove card ${card(op.id)}`;
     case "track": return `${STATUS_LABEL[op.fields.status]}: ${promo(op.promo)}`;
@@ -186,7 +204,10 @@ export function describeOp(ledger: Ledger, op: Op): string {
   }
 }
 
-export const commitMessage = (ledger: Ledger, op: Op, login?: Login | null) => describeOp(ledger, op) + (login ? ` (by ${login})` : "");
+/** Who a login is: the person who uses it, or the login's own name when settings.json doesn't say. */
+export const whoIs = (ledger: Pick<Ledger, "people">, login: Login) => ledger.people.find((x) => x.login === login)?.name ?? login;
+
+export const commitMessage = (ledger: Ledger, op: Op, login?: Login | null) => describeOp(ledger, op) + (login ? ` (by ${whoIs(ledger, login)})` : "");
 
 // ---------- checking what the browser sends ----------
 
@@ -200,7 +221,9 @@ const networks = (v: unknown) => Array.isArray(v) && v.every(oneOf(NETWORKS));
 
 type Checks = Record<string, (v: unknown) => boolean>;
 const PROMO: Checks = { title: name, summary: text(1000), url: text(500), networks, kind: oneOf(KINDS), starts: dateOrEmpty, ends: dateOrEmpty, details: text(20000) };
-const CARD: Checks = { bank: isBank, name, network: oneOf(NETWORKS), note: text(500) };
+const owners = (v: unknown) => Array.isArray(v) && v.length <= 10 && v.every((x) => typeof x === "string" && /^[a-z0-9-]{1,40}$/.test(x));
+const cardType = (v: unknown) => typeof v === "string" && v.trim() !== "" && v.length <= 60;
+const CARD: Checks = { bank: isBank, type: cardType, network: oneOf(NETWORKS), owners };
 const TRACKING: Checks = { status: oneOf(STATUSES), card: (v) => v === "" || id(v), goal: amount, reward: amount, note: text(1000) };
 const SPEND: Checks = { date: isDate, promo: id, card: (v) => v === "" || id(v), amount, note: text(500) };
 
@@ -217,7 +240,7 @@ export function isOp(v: unknown): v is Op {
     case "addPromo": return isBank(op.bank) && /^[a-z0-9-]{1,120}$/.test(op.slug) && all(op.fields, PROMO) && isDate(op.today);
     case "updatePromo": return id(op.id) && some(op.changes, PROMO) && isDate(op.today);
     case "deletePromo": return id(op.id);
-    case "addCard": return id(op.id) && all(op.fields, CARD);
+    case "addCard": return id(op.id) && all(op.fields, CARD) && op.id === cardId(op.fields.bank, op.fields.type, op.fields.network);
     case "updateCard": return id(op.id) && some(op.changes, CARD);
     case "deleteCard": return id(op.id);
     case "track": return id(op.promo) && all(op.fields, TRACKING) && isDate(op.today);

@@ -45,8 +45,8 @@ test("on, ending, and soonest-ending first", () => {
 
 test("a promo fits our cards of its bank on a network it lists, or any when it lists none", () => {
   const cards = [
-    { id: "v", bank: "rcbc" as const, name: "Visa Platinum", network: "visa" as const, note: "" },
-    { id: "j", bank: "rcbc" as const, name: "JCB Gold", network: "jcb" as const, note: "" },
+    { id: "v", bank: "rcbc" as const, type: "Platinum", network: "visa" as const, owners: [] },
+    { id: "j", bank: "rcbc" as const, type: "Gold", network: "jcb" as const, owners: [] },
   ];
   assert.deepEqual(cardsFor(promo("a", { networks: ["visa", "mastercard"] }), cards).map((c) => c.id), ["v"]);
   assert.deepEqual(cardsFor(promo("a", { networks: [] }), cards).map((c) => c.id), ["v", "j"]);

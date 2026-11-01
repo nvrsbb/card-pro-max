@@ -27,13 +27,13 @@ type Part = { m?: number; d: number; y?: number };
 /**
  * A promo period as written by the bank, as start and end dates (either "" when it isn't said):
  * "October 16 - November 18, 2026", "Oct 17 – 18, 2026", "January 5, 2026 to March 31, 2027",
- * "Until December 31, 2026". A start with no year takes the end's (the year before when its month is later).
+ * "Until December 31, 2026", "November 1 to 12, 2026". A start with no year takes the end's (the year before when its month is later).
  */
 export function parsePeriod(text: string): { starts: string; ends: string } {
   const none = { starts: "", ends: "" };
   const parts: Part[] = [];
-  // A month name with its day, or a bare day right after a dash ("October 1 - 31, 2026"), each with an optional year.
-  const re = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?\b(?:,?\s*(\d{4}))?|[-–—]\s*(\d{1,2})(?:st|nd|rd|th)?\b(?:,?\s*(\d{4}))?/gi;
+  // A month name with its day, or a bare day right after a dash or "to" ("October 1 - 31, 2026"), each with an optional year.
+  const re = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?\b(?:,?\s*(\d{4}))?|(?:[-–—]|\bto\b)\s*(\d{1,2})(?:st|nd|rd|th)?\b(?:,?\s*(\d{4}))?/gi;
   for (const match of text.matchAll(re)) {
     if (match[1]) parts.push({ m: MONTHS.indexOf(match[1].toLowerCase()) + 1, d: Number(match[2]), y: match[3] ? Number(match[3]) : undefined });
     else if (parts.length > 0) parts.push({ d: Number(match[4]), y: match[5] ? Number(match[5]) : undefined });

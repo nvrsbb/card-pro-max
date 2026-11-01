@@ -3,7 +3,8 @@
 // The browser's copy of the ledger. Edits show at once, then are saved (one commit each) in order. As in ~/Programs/budge.
 import { useSyncExternalStore } from "react";
 import { applyOp, type Ledger, type Op } from "./ledger";
-import type { ImportSummary, LedgerSource } from "./store";
+import type { BankCheck } from "./import";
+import type { LedgerSource } from "./store";
 
 export * from "./ledger";
 
@@ -77,17 +78,17 @@ export function mutate(op: Op): boolean {
   return true;
 }
 
-export type CheckResult = ImportSummary & { read: number; failed: number };
+export type { BankCheck, CheckResult } from "./import";
 
-/** "Check for new promos": runs after any edits in flight, then shows the catalog as saved. */
-export function checkForPromos(): Promise<CheckResult> {
+/** "Check for new promos": every bank, after any edits in flight, then shows the catalog as saved. */
+export function checkForPromos(): Promise<BankCheck[]> {
   const asked = generation;
   set({ pending: state.pending + 1, error: null });
   const run = queue.then(async () => {
     try {
-      const { summary, ledger } = await request<{ summary: CheckResult; ledger: Ledger }>("/api/import", { method: "POST" });
+      const { checks, ledger } = await request<{ checks: BankCheck[]; ledger: Ledger }>("/api/import", { method: "POST" });
       if (asked === generation) set(state.pending === 1 ? { ledger, pending: 0 } : { pending: state.pending - 1 });
-      return summary;
+      return checks;
     } catch (error) {
       if (asked === generation) set({ pending: state.pending - 1 });
       throw error;

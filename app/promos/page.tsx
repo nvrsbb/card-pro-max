@@ -3,9 +3,9 @@
 // The catalog: every promo, narrowed to what's on for our cards by default. A promo opens in the side panel.
 import { useSearchParams } from "next/navigation";
 import { Suspense, useDeferredValue, useState, type FormEvent } from "react";
-import { BANKS, checkForPromos, KINDS, KIND_LABEL, mutate, NETWORKS, NETWORK_LABEL, type CheckResult, type Kind, type Ledger, type Network, type Promo, type PromoFields, useLedger } from "@/lib/client";
+import { BANKS, checkForPromos, KINDS, KIND_LABEL, mutate, NETWORKS, NETWORK_LABEL, type Bank, type BankCheck, type Kind, type Ledger, type Network, type Promo, type PromoFields, useLedger } from "@/lib/client";
 import { manilaToday } from "@/lib/dates";
-import { byEnding, cardsFor, hasEnded, isNew, isOn, isUpcoming, trackingOf } from "@/lib/promos";
+import { byEnding, cardsFor, checkWords, hasEnded, isNew, isOn, isUpcoming, trackingOf } from "@/lib/promos";
 import { holders, ownedCards, possessive } from "@/lib/cards";
 import { Drawer, Ends, focusHere, KindChip, networkNames, StatusChip } from "../components";
 import { PromoPanel } from "../promo-panel";
@@ -39,11 +39,12 @@ function Promos() {
   const asked = params.get("show") ?? "";
   const [show, setShow] = useState<Show>(asked in SHOWS ? asked as Show : "on");
   const [kind, setKind] = useState<Kind | "">("");
+  const [bank, setBank] = useState<Bank | "">("");
   const [whose, setWhose] = useState<string | null>(null); // "ours", a person's id, or "any"; null: ours once we have some
   const [open, setOpen] = useState<string | null>(params.get("promo"));
   const [editing, setEditing] = useState<Promo | null | undefined>(undefined); // undefined: closed; null: new
   const [checking, setChecking] = useState(false);
-  const [checked, setChecked] = useState<{ result?: CheckResult; error?: string } | null>(null);
+  const [checked, setChecked] = useState<{ checks?: BankCheck[]; error?: string } | null>(null);
 
   if (!ledger) return <section className="page"><p className="muted">Loading…</p></section>;
   const today = manilaToday();
@@ -51,13 +52,13 @@ function Promos() {
   const forWhom = anyOurs ? whose ?? "ours" : "any";
   const theirs = forWhom === "any" ? [] : ownedCards(ledger.cards, forWhom === "ours" ? undefined : forWhom);
   const list = ledger.promos
-    .filter((p) => shown(ledger, p, show, today) && (!kind || p.kind === kind) && (forWhom === "any" || cardsFor(p, theirs).length > 0) && matches(p, q))
+    .filter((p) => shown(ledger, p, show, today) && (!bank || p.bank === bank) && (!kind || p.kind === kind) && (forWhom === "any" || cardsFor(p, theirs).length > 0) && matches(p, q))
     .sort(show === "new" ? (a, b) => b.added.localeCompare(a.added) || byEnding(a, b) : byEnding);
 
   async function check() {
     setChecking(true);
     setChecked(null);
-    try { setChecked({ result: await checkForPromos() }); }
+    try { setChecked({ checks: await checkForPromos() }); }
     catch (error) { setChecked({ error: (error as Error).message }); }
     finally { setChecking(false); }
   }
@@ -68,6 +69,10 @@ function Promos() {
         <input className="search" type="search" placeholder="Search promos" aria-label="Search promos" value={query} onChange={(e) => setQuery(e.target.value)} />
         <select aria-label="Which promos" value={show} onChange={(e) => setShow(e.target.value as Show)}>
           {(Object.keys(SHOWS) as Show[]).map((s) => <option key={s} value={s}>{SHOWS[s]}</option>)}
+        </select>
+        <select aria-label="Bank" value={bank} onChange={(e) => setBank(e.target.value as Bank | "")}>
+          <option value="">All banks</option>
+          {(Object.keys(BANKS) as Bank[]).map((b) => <option key={b} value={b}>{BANKS[b]}</option>)}
         </select>
         <select aria-label="Kind" value={kind} onChange={(e) => setKind(e.target.value as Kind | "")}>
           <option value="">Every kind</option>
@@ -81,15 +86,17 @@ function Promos() {
       </div>
       <div className="head-actions">
         <button type="button" onClick={() => setEditing(null)}>Add promo</button>
-        <button type="button" className="primary" onClick={() => void check()} disabled={checking}>{checking ? "Checking RCBC…" : "Check for new promos"}</button>
+        <button type="button" className="primary" onClick={() => void check()} disabled={checking}>{checking ? "Checking the banks…" : "Check for new promos"}</button>
       </div>
     </div>
-    {checked && <p className="note" role="status">{checked.error ? <span className="down">{checked.error}</span> : summary(checked.result!)}</p>}
+    {checked && <p className="note" role="status">{checked.error ? <span className="down">{checked.error}</span>
+      : checked.checks!.map((c) => <span key={c.bank} className={c.error ? "down" : undefined}>
+        {c.error ? `Couldn't check ${BANKS[c.bank]}: ${c.error}` : `Checked ${BANKS[c.bank]}: ${checkWords(c.result!)}`}{" "}</span>)}</p>}
     <div className="workspace">
       <div className="panel">
         <div className="panel-head"><h2>{SHOWS[show]} <span className="muted">{list.length} promo{list.length === 1 ? "" : "s"}</span></h2></div>
         {ledger.promos.length === 0 ? <div className="empty">
-          <p>No promos yet.</p><p>Check for new promos reads every promo on RCBC&apos;s site; it takes about half a minute the first time.</p>
+          <p>No promos yet.</p><p>Check for new promos reads every credit card promo on each bank&apos;s site; it takes a minute or two the first time.</p>
         </div> : list.length === 0 ? <div className="empty"><p>Nothing here with these filters.</p></div> : <div className="scroll">
           <table className="rows">
             <thead><tr><th>Promo</th><th>Kind</th><th className="hide-sm">Cards</th><th>Ends</th><th>Ours</th></tr></thead>
@@ -99,7 +106,7 @@ function Promos() {
                 <td className="title-cell">
                   <button type="button" className="link" onClick={(e) => { e.stopPropagation(); setOpen(p.id); }}>{p.title}</button>
                   {isNew(p, ledger.promos, today) && <> <span className="chip new">New</span></>}
-                  {p.summary && <span className="sub">{p.summary}</span>}
+                  <span className="sub"><span className="bank">{BANKS[p.bank]}</span>{p.summary && ` · ${p.summary}`}</span>
                 </td>
                 <td><KindChip kind={p.kind} /></td>
                 <td className="hide-sm">{networkNames(p.networks)}</td>
@@ -116,12 +123,6 @@ function Promos() {
       {editing !== undefined && <PromoForm key={editing?.id ?? "new"} ledger={ledger} promo={editing} onDone={(id) => { setEditing(undefined); if (id) setOpen(id); }} />}
     </Drawer>
   </section>;
-}
-
-function summary(r: CheckResult): string {
-  const parts = [[r.added, "new"], [r.updated, "updated"], [r.gone, "taken down"]].filter(([n]) => n).map(([n, w]) => `${n} ${w}`);
-  const failed = r.failed ? ` ${r.failed} page${r.failed === 1 ? "" : "s"} didn't load; they'll be read next time.` : "";
-  return `Checked RCBC: ${parts.length ? parts.join(", ") : "nothing changed"}.${failed}`;
 }
 
 /** A promo heard about elsewhere (an email, a branch poster), or one added by hand being edited. */

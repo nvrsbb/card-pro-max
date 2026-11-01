@@ -1,4 +1,4 @@
-Card Pro Max tracks credit card promos: the bank's catalog (RCBC first), which ones we've joined, spending toward each
+Card Pro Max tracks credit card promos: each bank's catalog (RCBC and EastWest), which ones we've joined, spending toward each
 minimum, and rewards earned and credited. Everything below applies to every session, including cloud sessions (they
 don't see the owner's Mac, so this file is the whole briefing).
 
@@ -20,7 +20,7 @@ don't see the owner's Mac, so this file is the whole briefing).
   one PR, **GOLD** scouts the pages with made-up data. None of them touches the real ledger.
 - **Log every finished request in the Tracker as Done** (`tracker.json` in the ledger repo; ops in `lib/tracker.ts`).
 - Check UI changes in a browser: `LEDGER_DIR=<scratch folder> npx next dev -p 3127` (no password in development),
-  `npm run import:rcbc` with the same `LEDGER_DIR` for a real catalog, made-up cards and spending. Never test against the real ledger.
+  `npm run import:promos` with the same `LEDGER_DIR` for a real catalog, made-up cards and spending. Never test against the real ledger.
 - Ask before anything hard to undo: deleting data, rewriting ledger history, changing what the member login can see.
 
 ## Data
@@ -32,11 +32,18 @@ don't see the owner's Mac, so this file is the whole briefing).
   or a local folder in development. `lib/client.ts` is the browser's copy: `mutate(op)` shows an edit at once and saves in order.
 - People (`settings.json` `people`: id, name, login) live in the ledger, never in this repo. Commits end "(by Name)" (`whoIs`).
 - Cards (`lib/cards.ts`): a card is bank + type + network (`cardId`, `cardName`: "RCBC Flex Visa") with `owners` (person ids;
-  none: not ours). `RCBC_CARDS` is the bank's list, shown untagged until someone tags one (`tagOp` adds it then).
+  none: not ours). `RCBC_CARDS` and `EASTWEST_CARDS` (together `BANK_CARDS`) are the banks' lists, shown untagged until someone tags one (`tagOp` adds it then).
   "Our cards" is always `ownedCards`, never `ledger.cards` as a whole.
-- Banks: `BANKS` in `lib/ledger.ts`. Each bank has a pure parser (`lib/rcbc.ts`: `parseList`, `parseDetail`, tested on
-  synthetic HTML shaped like the real pages) and an importer (`lib/import.ts`). `mergeImport` (`lib/promos.ts`) is
-  bank-agnostic. A new bank = a parser + tests, an importer, a `BANKS` entry, and a call from `/api/import` and `/api/cron`.
+- Banks: `BANKS` in `lib/ledger.ts` (RCBC, EastWest). Each bank has a pure parser (`lib/rcbc.ts`, `lib/eastwest.ts`:
+  `parseList`, `parseDetail`, tested on synthetic HTML shaped like the real pages, never copied pages) and an entry in
+  `IMPORTERS` (`lib/import.ts`: how to read its list, a promo's page, and its address). `importAll` checks every bank in
+  turn, each saved on its own, and reports per bank; `/api/import`, `/api/cron` and `npm run import:promos` use it.
+  `mergeImport` (`lib/promos.ts`) is bank-agnostic. A new bank = a parser + tests, an `IMPORTERS` entry, a `BANKS`
+  entry and its cards in `lib/cards.ts` (`BANK_CARDS`).
+- EastWest's list (eastwestbanker.com/promos) is server-rendered Drupal: every product in one feed, 9 a page, ended
+  promos kept for years. Only credit card promos are kept (the "Credit Cards" pill, or a network-only pill without
+  debit/prepaid), and the importer drops those whose listed period has ended. Its promo pages don't repeat the period,
+  so it comes from the list card, else the summary or mechanics. Some installment offers have no end date at all.
 - RCBC's images are same-site only (`cross-origin-resource-policy`), so the app doesn't show them.
 - `guessTerms` only starts the Track form; the owner confirms minimum spend and reward. Mechanics vary (tiers, foreign currency).
 - Every route except `/login` and `/api/cron` needs the signed session cookie (`proxy.ts`, checked again in each route).

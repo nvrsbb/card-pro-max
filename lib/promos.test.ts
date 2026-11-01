@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { emptyLedger, type Ledger } from "./ledger.ts";
 import { promo } from "./fixtures.ts";
-import { byEnding, cardsFor, daysLeft, describeImport, guessTerms, isNew, isOn, kindOf, KEEP_DAYS, mergeImport, needsDetail, progress, rewardTotals } from "./promos.ts";
+import { byEnding, cardsFor, checkWords, daysLeft, describeImport, guessTerms, isNew, isOn, kindOf, KEEP_DAYS, mergeImport, needsDetail, progress, rewardTotals } from "./promos.ts";
 import type { Detail, Listed } from "./rcbc.ts";
 
 const TODAY = "2026-10-31";
@@ -19,6 +19,9 @@ test("the kind of promo, from its title", () => {
   assert.equal(kindOf("20% OFF at Four Points by Sheraton Boracay"), "discount");
   assert.equal(kindOf("₱1,000 OFF at SM Appliance Center"), "discount");
   assert.equal(kindOf("Anantara Vacation Club Getaway for only ₱11,500"), "discount");
+  assert.equal(kindOf("Up to 35% savings at Sample Hotel"), "discount"); // EastWest's word for it
+  assert.equal(kindOf("Save up to USD 616 on your next Japan getaway"), "discount");
+  assert.equal(kindOf("Get Php 1,500 Cash Credit with Sample Pay"), "cashback");
   assert.equal(kindOf("#JCBChooseday: FREE Japanese Matcha at Lawson"), "freebie");
   assert.equal(kindOf("Christmas in October at SM Appliance Center"), "other");
 });
@@ -127,4 +130,9 @@ test("new: seen in the last week, but not in the very first check", () => {
   assert.equal(isNew(all[1], all, "2026-11-05"), true);
   assert.equal(isNew(all[1], all, "2026-11-06"), false);
   assert.equal(isNew(all[3], all, TODAY), false);
+});
+
+test("what a check of one bank found, in words", () => {
+  assert.equal(checkWords({ added: 2, updated: 0, gone: 1, failed: 0 }), "2 new, 1 taken down.");
+  assert.equal(checkWords({ added: 0, updated: 0, gone: 0, failed: 1 }), "nothing changed. 1 page didn't load; they'll be read next time.");
 });

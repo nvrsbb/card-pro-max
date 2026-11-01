@@ -17,6 +17,12 @@ test("promo periods as RCBC writes them", () => {
   assert.deepEqual(parsePeriod("Sept. 1st - Dec. 31st, 2026"), { starts: "2026-09-01", ends: "2026-12-31" });
 });
 
+test("promo periods as EastWest writes them", () => {
+  assert.deepEqual(parsePeriod("November 1 to 12, 2026"), { starts: "2026-11-01", ends: "2026-11-12" });
+  assert.deepEqual(parsePeriod("July 1 to December 29, 2026"), { starts: "2026-07-01", ends: "2026-12-29" });
+  assert.deepEqual(parsePeriod("until July 31, 2026"), { starts: "", ends: "2026-07-31" });
+});
+
 test("a start with no year in a period that crosses New Year is the year before", () => {
   assert.deepEqual(parsePeriod("December 1 - January 31, 2027"), { starts: "2026-12-01", ends: "2027-01-31" });
 });

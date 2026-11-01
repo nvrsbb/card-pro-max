@@ -9,7 +9,9 @@
     "lint": "eslint",
     "test": "node --test \"lib/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
-    "import:rcbc": "node scripts/import-rcbc.ts"
+    "import:promos": "node scripts/import.ts",
+    "import:rcbc": "node scripts/import.ts rcbc",
+    "import:eastwest": "node scripts/import.ts eastwest"
   },
   "dependencies": {
     "next": "16.4.1",

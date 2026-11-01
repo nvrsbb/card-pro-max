@@ -19,7 +19,7 @@ export const KINDS = ["cashback", "discount", "installment", "freebie", "points"
 export type Kind = (typeof KINDS)[number];
 export const KIND_LABEL: Record<Kind, string> = { cashback: "Cashback", discount: "Discount", installment: "0% installment", freebie: "Freebie", points: "Points & miles", raffle: "Raffle", other: "Other" };
 
-export const BANKS = { rcbc: "RCBC" } as const;
+export const BANKS = { rcbc: "RCBC", eastwest: "EastWest" } as const;
 export type Bank = keyof typeof BANKS;
 export const isBank = (v: unknown): v is Bank => typeof v === "string" && v in BANKS;
 

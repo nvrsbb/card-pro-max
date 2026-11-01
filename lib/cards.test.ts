@@ -1,15 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { allCards, holders, ownedCards, ownerNames, possessive, RCBC_CARDS, tagOp } from "./cards.ts";
+import { allCards, BANK_CARDS, EASTWEST_CARDS, holders, nameOf, ownedCards, ownerNames, possessive, RCBC_CARDS, tagOp } from "./cards.ts";
 import { cardId, cardName, isOp, type Card, type Person } from "./ledger.ts";
 
 const people: Person[] = [{ id: "a", name: "Arvs", login: "admin" }, { id: "b", name: "Ayette", login: "member" }];
 const flex: Card = { id: "rcbc-flex-visa", bank: "rcbc", type: "Flex", network: "visa", owners: ["a"] };
 const both: Card = { id: "rcbc-gold-jcb", bank: "rcbc", type: "Gold", network: "jcb", owners: ["a", "b"] };
 
-test("every RCBC card is listed once: tagged ones as stored, the rest as not ours; ours first", () => {
+test("every bank's card is listed once: tagged ones as stored, the rest as not ours; ours first", () => {
   const all = allCards({ cards: [flex, both] });
-  assert.equal(all.length, RCBC_CARDS.length);
+  assert.equal(all.length, RCBC_CARDS.length + EASTWEST_CARDS.length);
+  assert.equal(new Set(BANK_CARDS.map((c) => c.id)).size, BANK_CARDS.length);
+  assert.ok(all.some((c) => c.bank === "eastwest") && all.some((c) => c.bank === "rcbc"));
   assert.deepEqual(all.slice(0, 2).map((c) => c.id), ["rcbc-flex-visa", "rcbc-gold-jcb"]);
   assert.deepEqual(all.filter((c) => c.id === "rcbc-flex-visa"), [flex]);
   assert.ok(all.slice(2).every((c) => c.owners.length === 0));
@@ -28,6 +30,8 @@ test("a card's name and id come from its bank, type and network", () => {
   assert.equal(cardName(flex), "RCBC Flex Visa");
   assert.equal(cardId("rcbc", "Flex Gold", "visa"), "rcbc-flex-gold-visa");
   assert.ok(RCBC_CARDS.some((c) => c.id === cardId("rcbc", "Gold", "jcb")));
+  assert.equal(nameOf({ cards: [] }, "eastwest-platinum-mastercard"), "EastWest Platinum Mastercard");
+  assert.equal(nameOf({ cards: [] }, "eastwest-priority-infinite-visa"), "EastWest Priority Infinite Visa");
 });
 
 test("tagging a bank card adds it the first time and updates it after; the edit is a valid one", () => {

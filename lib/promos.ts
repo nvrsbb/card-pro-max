@@ -7,11 +7,11 @@ import type { Bank, Card, Kind, Ledger, Network, Promo, Spend, Status, Tracking 
 export function kindOf(title: string, summary = ""): Kind {
   const t = title.toLowerCase();
   const all = `${t} ${summary.toLowerCase()}`;
-  if (/cash ?back|rebate|statement credit/.test(t)) return "cashback";
+  if (/cash ?back|rebate|statement credit|cash credit/.test(t)) return "cashback";
   if (/0% (installment|interest)|installment/.test(t)) return "installment";
   if (/\bwin\b|raffle|draw|sweepstakes/.test(t)) return "raffle";
   if (/rewards? points|bonus points|airmiles|\bmiles\b/.test(t)) return "points";
-  if (/% ?off|₱[\d,]+ ?off|\boff\b|discount|as low as|for only|buy \d+,? get|privileges/.test(t)) return "discount";
+  if (/% ?off|₱[\d,]+ ?off|\boff\b|discount|savings?\b|\bsave\b|as low as|for only|buy \d+,? get|privileges/.test(t)) return "discount";
   if (/free|freebie|gift|complimentary/.test(t)) return "freebie";
   if (/cash ?back|rebate/.test(all)) return "cashback";
   if (/% ?off|discount/.test(all)) return "discount";
@@ -133,6 +133,13 @@ export function describeImport(bankName: string, r: ImportResult): string {
   const parts = [[r.added.length, "new"], [r.updated.length, "updated"], [r.gone.length, "gone"], [r.removed.length, "cleared"]]
     .filter(([n]) => n).map(([n, what]) => `${n} ${what}`);
   return `${bankName} promos: ${parts.length ? parts.join(", ") : "no changes"}`;
+}
+
+/** What a check of one bank found, in words: "2 new, 1 taken down", and any pages that didn't load. */
+export function checkWords(r: { added: number; updated: number; gone: number; failed: number }): string {
+  const parts = [[r.added, "new"], [r.updated, "updated"], [r.gone, "taken down"]].filter(([n]) => n).map(([n, w]) => `${n} ${w}`);
+  const failed = r.failed ? ` ${r.failed} page${r.failed === 1 ? "" : "s"} didn't load; they'll be read next time.` : "";
+  return `${parts.length ? parts.join(", ") : "nothing changed"}.${failed}`;
 }
 
 /** How often a listed promo's own page is read again, to catch changed terms and extended dates. */

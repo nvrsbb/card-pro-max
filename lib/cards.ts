@@ -23,8 +23,17 @@ export const EASTWEST_CARDS: KnownCard[] = ([
   ["Privilege", "visa", "classic"], ["Privilege", "mastercard", "classic"], ["Puregold Always Panalo", "visa", "classic"], ["foodpanda", "visa", "classic"],
 ] as const).map(([type, network, tier]) => ({ id: cardId("eastwest", type, network), bank: "eastwest", type, network, tier }));
 
+// BPI's credit cards, as its card pages and promo mechanics name them ("BPI Gold Rewards Card", "Petron BPI Card"), with
+// the network their pages state or their addresses name (bpi-gold-mastercard, amore-visa-platinum).
+export const BPI_CARDS: KnownCard[] = ([
+  ["Signature Wealth", "visa", "premium"], ["Signature", "visa", "premium"], ["Platinum Rewards", "mastercard", "premium"],
+  ["Amore Platinum Cashback", "visa", "premium"], ["Gold Rewards", "mastercard", "gold"],
+  ["Rewards", "mastercard", "classic"], ["Amore Cashback", "visa", "classic"], ["Edge", "mastercard", "classic"],
+  ["Petron", "mastercard", "classic"], ["Robinsons Cashback", "visa", "classic"],
+] as const).map(([type, network, tier]) => ({ id: cardId("bpi", type, network), bank: "bpi", type, network, tier }));
+
 /** Every bank's cards. */
-export const BANK_CARDS: KnownCard[] = [...RCBC_CARDS, ...EASTWEST_CARDS];
+export const BANK_CARDS: KnownCard[] = [...RCBC_CARDS, ...EASTWEST_CARDS, ...BPI_CARDS];
 
 export const knownCard = (id: string) => BANK_CARDS.find((c) => c.id === id);
 

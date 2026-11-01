@@ -13,6 +13,11 @@ test("the kind of promo, from its title", () => {
   assert.equal(kindOf("Special Offers on iPhone Duo", "0% interest for up to 24 months or score up to ₱5,000 CASHBACK!"), "cashback");
   assert.equal(kindOf("10% Cashback in Taiwan with JCB"), "cashback");
   assert.equal(kindOf("0% Installment + Freebie at Asian Home Appliance"), "installment");
+  assert.equal(kindOf("Up to 24 months FlexipayZero at Sample Store"), "installment");
+  assert.equal(kindOf("Flexipay with Sample Shop", "Enjoy 0% interest on installments with your BPI Credit Card."), "installment");
+  assert.equal(kindOf("Sample First Flexipay", "Enjoy 3 months FlexipayZero."), "installment");
+  assert.equal(kindOf("Sample Store's Real 0% SIP"), "installment");
+  assert.equal(kindOf("Sample Mall Promo", "Pay with 0% S.I.P. for 6 months."), "installment");
   assert.equal(kindOf("#JCBestofJapan Promo: Win a Luxury Trip to Japan"), "raffle");
   assert.equal(kindOf("RCBC Airmiles Visa Signature Accelerated Airmiles Promo"), "points");
   assert.equal(kindOf("Redeem Rewards Points for PAGSS Lounge Access"), "points");
@@ -110,16 +115,27 @@ test("a promo that comes back is no longer gone; old untracked ones are cleared,
   assert.ok(KEEP_DAYS < 303);
 });
 
+test("a promo whose page didn't load is marked checked, so it's tried again weekly, not on every check", () => {
+  const ledger: Ledger = { ...emptyLedger(), promos: [promo("loops", { checked: "2026-10-20" })] };
+  const r = mergeImport(ledger, "rcbc", [listed("loops"), listed("new-loops")], {}, TODAY, url, ["loops", "new-loops"]);
+  const get = (id: string) => r.promos.find((p) => p.id === id)!;
+  assert.deepEqual([get("rcbc:loops").checked, get("rcbc:loops").details], [TODAY, ""]);
+  assert.deepEqual([get("rcbc:new-loops").checked, get("rcbc:new-loops").details], [TODAY, ""]);
+  assert.deepEqual(needsDetail({ ...ledger, promos: r.promos }, "rcbc", [listed("loops"), listed("new-loops")], TODAY), []);
+  assert.deepEqual(needsDetail({ ...ledger, promos: r.promos }, "rcbc", [listed("loops"), listed("new-loops")], "2026-11-07"), ["loops", "new-loops"]);
+});
+
 test("a promo's page is read when it's new, changed, never read, past its end date, or not read for a week", () => {
   const ledger: Ledger = { ...emptyLedger(), promos: [
     promo("same", { details: "x", checked: "2026-10-30" }),
     promo("renamed", { details: "x", checked: "2026-10-30" }),
-    promo("unread", { checked: "2026-10-30" }),
+    promo("unread"),
+    promo("tried", { checked: "2026-10-30" }), // its page didn't load two days ago: tried again weekly
     promo("ended", { details: "x", ends: "2026-10-30", checked: "2026-10-30" }),
     promo("stale", { details: "x", checked: "2026-10-24" }),
     promo("long-ended", { details: "x", ends: "2026-08-31", checked: "2026-10-30" }),
   ] };
-  const list = [listed("same"), listed("renamed", { title: "New" }), listed("unread"), listed("ended"), listed("stale"), listed("new"), listed("long-ended")];
+  const list = [listed("same"), listed("renamed", { title: "New" }), listed("unread"), listed("tried"), listed("ended"), listed("stale"), listed("new"), listed("long-ended")];
   assert.deepEqual(needsDetail(ledger, "rcbc", list, TODAY), ["renamed", "unread", "ended", "stale", "new"]);
   // Still listed months after it ended: read on the weekly round, not on every check.
   assert.ok(needsDetail({ ...ledger, promos: [promo("long-ended", { details: "x", ends: "2026-08-31", checked: "2026-10-24" })] }, "rcbc", list, TODAY).includes("long-ended"));
@@ -137,7 +153,7 @@ test("new: seen in the last week, but not in the very first check", () => {
 
 test("what a check of one bank found, in words", () => {
   assert.equal(checkWords({ added: 2, updated: 0, gone: 1, failed: 0 }), "2 new, 1 taken down.");
-  assert.equal(checkWords({ added: 0, updated: 0, gone: 0, failed: 1 }), "nothing changed. 1 page didn't load; they'll be read next time.");
+  assert.equal(checkWords({ added: 0, updated: 0, gone: 0, failed: 1 }), "nothing changed. 1 page didn't load; they'll be tried again next week.");
 });
 
 test("a new promo whose own page shows it already ended is left out; one we have stays", () => {

@@ -78,3 +78,72 @@ test("a new promo whose own page says it already ended isn't added", async (t) =
   assert.equal(eastwest.error, undefined);
   assert.equal(eastwest.result?.added, 0);
 });
+
+// BPI's list comes as JSON, twelve promos a page (here two), with how many the credit card tab has in all.
+const BPI_JSON = "https://www.bpi.com.ph/content/bpi/ph/en/personal/rewards-and-promotions/promos/jcr:content/root/container/tabshorizontal.model.json";
+const bpiArticle = (slug: string, ends: string, expired = false) => ({ heading: slug, description: "Enjoy 20% savings.", image: "", viewArticleLink: `/personal/rewards-and-promotions/promos/${slug}`,
+  promoExpiryDate: ends, primaryTags: ["Credit cards"], expiredPage: expired });
+const bpiPage = (size: number, articles: object[]) => JSON.stringify({ mapArticle: { "Credit cards": [{ articleListSize: size, listPage: articles }] } });
+const BPI_DETAIL = `<h2 class="section-header__heading ga-section-text">Promo Mechanics</h2><div class="cmp-text"><p>Minimum spend of Php 1,000.</p></div><footer></footer>`;
+
+test("BPI's list is read page by page; promos it shows as expired or past their Valid until are left out", async (t) => {
+  const dir = await mkdtemp(path.join(tmpdir(), "card-pro-max-"));
+  const env = { ...process.env };
+  delete process.env.LEDGER_REPO;
+  process.env.LEDGER_DIR = dir;
+  t.mock.method(globalThis, "fetch", async (url: string) => {
+    if (url === `${BPI_JSON}?sort=newest&page=1`) return new Response(bpiPage(4, [bpiArticle("sample-cafe", "Dec 31, 2099"), bpiArticle("expired-cafe", "Mar 08, 2026", true)]));
+    if (url === `${BPI_JSON}?sort=newest&page=2`) return new Response(bpiPage(4, [bpiArticle("old-cafe", "Jan 31, 2020"), bpiArticle("undated-cafe", "")]));
+    if (url.startsWith("https://www.bpi.com.ph/personal/rewards-and-promotions/promos/")) return new Response(BPI_DETAIL);
+    return new Response("not found", { status: 404 });
+  });
+  t.after(async () => { process.env = env; await rm(dir, { recursive: true, force: true }); });
+
+  const { importAll } = await import("./import.ts");
+  const [bpi] = await importAll("script", ["bpi"]);
+  assert.deepEqual(bpi, { bank: "bpi", result: { added: 2, updated: 0, gone: 0, removed: 0, read: 2, failed: 0 } });
+  const saved = JSON.parse(await readFile(path.join(dir, "promos/bpi.json"), "utf8"));
+  assert.deepEqual(saved.map((p: { id: string; ends: string; url: string }) => [p.id, p.ends, p.url]), [
+    ["bpi:sample-cafe", "2099-12-31", "https://www.bpi.com.ph/personal/rewards-and-promotions/promos/sample-cafe"],
+    ["bpi:undated-cafe", "", "https://www.bpi.com.ph/personal/rewards-and-promotions/promos/undated-cafe"],
+  ]);
+});
+
+test("a BPI list page with no promos fails the check and saves nothing", async (t) => {
+  const dir = await mkdtemp(path.join(tmpdir(), "card-pro-max-"));
+  const env = { ...process.env };
+  delete process.env.LEDGER_REPO;
+  process.env.LEDGER_DIR = dir;
+  t.mock.method(globalThis, "fetch", async (url: string) => new Response(url.endsWith("page=1") ? bpiPage(4, [bpiArticle("a", ""), bpiArticle("b", "")])
+    : url.endsWith("page=2") ? bpiPage(4, []) : BPI_DETAIL));
+  t.after(async () => { process.env = env; await rm(dir, { recursive: true, force: true }); });
+
+  const { importAll } = await import("./import.ts");
+  const [bpi] = await importAll("script", ["bpi"]);
+  assert.match(bpi.error ?? "", /BPI's promo list page 2 had no promos/);
+  await assert.rejects(readFile(path.join(dir, "promos/bpi.json"), "utf8"));
+});
+
+test("a promo page that won't load is tried once, then left for the weekly round", async (t) => {
+  const dir = await mkdtemp(path.join(tmpdir(), "card-pro-max-"));
+  const env = { ...process.env };
+  delete process.env.LEDGER_REPO;
+  process.env.LEDGER_DIR = dir;
+  let detailReads = 0;
+  t.mock.method(globalThis, "fetch", async (url: string) => {
+    if (url === `${BPI_JSON}?sort=newest&page=1`) return new Response(bpiPage(1, [bpiArticle("loops-forever", "")]));
+    detailReads += 1;
+    throw new TypeError("redirect count exceeded");
+  });
+  t.after(async () => { process.env = env; await rm(dir, { recursive: true, force: true }); });
+
+  const { importAll } = await import("./import.ts");
+  const [first] = await importAll("script", ["bpi"]);
+  assert.deepEqual(first.result && [first.result.added, first.result.failed], [1, 1]);
+  const [second] = await importAll("script", ["bpi"]);
+  assert.deepEqual(second.result && [second.result.read, second.result.failed], [0, 0]);
+  assert.equal(detailReads, 1);
+  const [saved] = JSON.parse(await readFile(path.join(dir, "promos/bpi.json"), "utf8"));
+  assert.equal(saved.details, "");
+  assert.ok(saved.checked);
+});

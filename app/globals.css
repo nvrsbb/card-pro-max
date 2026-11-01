@@ -200,6 +200,7 @@ td.wrap { white-space: normal; }
 tbody tr:hover { background: var(--surface); }
 tr.clickable { cursor: pointer; }
 td .sub { display: block; font-size: 12px; color: var(--text-muted); white-space: normal; }
+td .sub .bank { color: var(--text); font-weight: 600; }
 td .icon-btn { width: 28px; height: 28px; }
 td.title-cell { white-space: normal; min-width: 220px; }
 td.title-cell button.link { color: var(--text); font-weight: 600; text-align: left; }
@@ -352,7 +353,7 @@ textarea { font: inherit; padding: 6px 10px; border: 1px solid var(--border-stro
   table.rows td.hide-sm { display: none; }
   input.search { width: 100%; }
   .filters { width: 100%; }
-  .filters select { flex: 1; min-width: 0; }
+  .filters select { flex: 1 1 140px; min-width: 0; } /* two to a row, so each says what it is */
 }
 
 /* ---------- login ---------- */

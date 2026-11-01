@@ -3,18 +3,19 @@
 // Cards: every card, tagged by whose it is (or not ours). Ours decide which promos show; the others show what we'd get.
 import { useState, type FormEvent } from "react";
 import { BANKS, cardId, cardName, mutate, NETWORKS, NETWORK_LABEL, type Bank, type Card as CardT, type Ledger, type Network, useLedger } from "@/lib/client";
-import { allCards, holders, ownedCards, RCBC_CARDS, tagOp } from "@/lib/cards";
+import { allCards, BANK_CARDS, holders, ownedCards, tagOp } from "@/lib/cards";
 import { manilaToday } from "@/lib/dates";
 import { cardsFor, isOn } from "@/lib/promos";
 import { Drawer, focusHere } from "../components";
 import { PromoPanel } from "../promo-panel";
 
-// Types as RCBC names them, offered as you type; any other is fine too.
-const TYPES = [...new Set(RCBC_CARDS.map((c) => c.type))].sort();
+// Types as each bank names them, offered as you type; any other is fine too.
+const typesOf = (bank: Bank) => [...new Set(BANK_CARDS.filter((c) => c.bank === bank).map((c) => c.type))].sort();
 
 export default function CardsPage() {
   const ledger = useLedger();
   const [whose, setWhose] = useState("all"); // all, ours, a person's id, or none (not ours)
+  const [bank, setBank] = useState<Bank | "">("");
   const [adding, setAdding] = useState(false);
   const [shown, setShown] = useState<CardT | null>(null);
   const [open, setOpen] = useState<string | null>(null);
@@ -22,7 +23,7 @@ export default function CardsPage() {
   const today = manilaToday();
   const on = ledger.promos.filter((p) => isOn(p, today));
   const people = holders(ledger);
-  const cards = allCards(ledger).filter((c) => whose === "all" || (whose === "ours" ? c.owners.length > 0 : whose === "none" ? c.owners.length === 0 : c.owners.includes(whose)));
+  const cards = allCards(ledger).filter((c) => !bank || c.bank === bank).filter((c) => whose === "all" || (whose === "ours" ? c.owners.length > 0 : whose === "none" ? c.owners.length === 0 : c.owners.includes(whose)));
   const tag = (card: CardT, person: string) => {
     const owners = card.owners.includes(person) ? card.owners.filter((o) => o !== person) : [...card.owners, person];
     mutate(tagOp(ledger, card, people.map((x) => x.id).filter((id) => owners.includes(id))));
@@ -30,9 +31,15 @@ export default function CardsPage() {
 
   return <section className="page">
     <div className="page-head">
-      <div className="segmented" role="group" aria-label="Whose cards">
-        {[["all", "All"], ["ours", "Ours"], ...(people.length > 1 ? people.map((x) => [x.id, x.name]) : []), ["none", "Not ours"]].map(([id, label]) =>
-          <button key={id} type="button" aria-pressed={whose === id} onClick={() => setWhose(id)}>{label}</button>)}
+      <div className="filters">
+        <div className="segmented" role="group" aria-label="Whose cards">
+          {[["all", "All"], ["ours", "Ours"], ...(people.length > 1 ? people.map((x) => [x.id, x.name]) : []), ["none", "Not ours"]].map(([id, label]) =>
+            <button key={id} type="button" aria-pressed={whose === id} onClick={() => setWhose(id)}>{label}</button>)}
+        </div>
+        <select aria-label="Bank" value={bank} onChange={(e) => setBank(e.target.value as Bank | "")}>
+          <option value="">All banks</option>
+          {(Object.keys(BANKS) as Bank[]).map((b) => <option key={b} value={b}>{BANKS[b]}</option>)}
+        </select>
       </div>
       <div className="head-actions"><button type="button" className="primary" onClick={() => setAdding(true)}>Add card</button></div>
     </div>
@@ -63,7 +70,7 @@ export default function CardsPage() {
       </div>
     </div>
     <Drawer open={adding} title="Add a card" onClose={() => setAdding(false)}>
-      {adding && <CardForm ledger={ledger} onDone={() => setAdding(false)} />}
+      {adding && <CardForm ledger={ledger} bank={bank || "rcbc"} onDone={() => setAdding(false)} />}
     </Drawer>
     <Drawer open={!!shown} title={shown ? cardName(shown) : "Card"} onClose={() => setShown(null)}>
       {shown && <CardPromos ledger={ledger} card={shown} onOpen={(id) => { setShown(null); setOpen(id); }} />}
@@ -73,8 +80,9 @@ export default function CardsPage() {
 }
 
 /** Just what makes a card: bank, type and network, and whose it is. One already listed is tagged instead. */
-function CardForm({ ledger, onDone }: { ledger: Ledger; onDone: () => void }) {
+function CardForm({ ledger, bank: first, onDone }: { ledger: Ledger; bank: Bank; onDone: () => void }) {
   const people = holders(ledger);
+  const [bank, setBank] = useState(first);
   function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -88,7 +96,7 @@ function CardForm({ ledger, onDone }: { ledger: Ledger; onDone: () => void }) {
   }
   return <form className="form" onSubmit={save}>
     <div className="row">
-      <label>Bank <select name="bank" defaultValue="rcbc">
+      <label>Bank <select name="bank" value={bank} onChange={(e) => setBank(e.target.value as Bank)}>
         {Object.entries(BANKS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
       </select></label>
       <label>Network <select name="network" defaultValue="visa">
@@ -96,7 +104,7 @@ function CardForm({ ledger, onDone }: { ledger: Ledger; onDone: () => void }) {
       </select></label>
     </div>
     <label>Type <input name="type" required maxLength={60} list="card-types" placeholder="Flex, Gold, Platinum…" {...focusHere()} /></label>
-    <datalist id="card-types">{TYPES.map((t) => <option key={t} value={t} />)}</datalist>
+    <datalist id="card-types">{typesOf(bank).map((t) => <option key={t} value={t} />)}</datalist>
     <fieldset><legend>Whose (none: not ours)</legend>
       {people.map((x) => <label key={x.id} className="check"><input type="checkbox" name={`owner-${x.id}`} defaultChecked /> {x.name}</label>)}
     </fieldset>

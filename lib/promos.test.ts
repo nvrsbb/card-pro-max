@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { emptyLedger, type Ledger } from "./ledger.ts";
 import { promo } from "./fixtures.ts";
-import { byEnding, cardsFor, daysLeft, describeImport, guessTerms, isNew, isOn, kindOf, KEEP_DAYS, mergeImport, needsDetail, progress, rewardTotals } from "./promos.ts";
+import { byEnding, cardsFor, checkWords, daysLeft, describeImport, guessTerms, isNew, isOn, kindOf, KEEP_DAYS, looksIncomplete, mergeImport, needsDetail, progress, rewardTotals, withoutEnded } from "./promos.ts";
 import type { Detail, Listed } from "./rcbc.ts";
 
 const TODAY = "2026-10-31";
@@ -19,6 +19,9 @@ test("the kind of promo, from its title", () => {
   assert.equal(kindOf("20% OFF at Four Points by Sheraton Boracay"), "discount");
   assert.equal(kindOf("₱1,000 OFF at SM Appliance Center"), "discount");
   assert.equal(kindOf("Anantara Vacation Club Getaway for only ₱11,500"), "discount");
+  assert.equal(kindOf("Up to 35% savings at Sample Hotel"), "discount"); // EastWest's word for it
+  assert.equal(kindOf("Save up to USD 616 on your next Japan getaway"), "discount");
+  assert.equal(kindOf("Get Php 1,500 Cash Credit with Sample Pay"), "cashback");
   assert.equal(kindOf("#JCBChooseday: FREE Japanese Matcha at Lawson"), "freebie");
   assert.equal(kindOf("Christmas in October at SM Appliance Center"), "other");
 });
@@ -114,9 +117,12 @@ test("a promo's page is read when it's new, changed, never read, past its end da
     promo("unread", { checked: "2026-10-30" }),
     promo("ended", { details: "x", ends: "2026-10-30", checked: "2026-10-30" }),
     promo("stale", { details: "x", checked: "2026-10-24" }),
+    promo("long-ended", { details: "x", ends: "2026-08-31", checked: "2026-10-30" }),
   ] };
-  const list = [listed("same"), listed("renamed", { title: "New" }), listed("unread"), listed("ended"), listed("stale"), listed("new")];
+  const list = [listed("same"), listed("renamed", { title: "New" }), listed("unread"), listed("ended"), listed("stale"), listed("new"), listed("long-ended")];
   assert.deepEqual(needsDetail(ledger, "rcbc", list, TODAY), ["renamed", "unread", "ended", "stale", "new"]);
+  // Still listed months after it ended: read on the weekly round, not on every check.
+  assert.ok(needsDetail({ ...ledger, promos: [promo("long-ended", { details: "x", ends: "2026-08-31", checked: "2026-10-24" })] }, "rcbc", list, TODAY).includes("long-ended"));
 });
 
 test("new: seen in the last week, but not in the very first check", () => {
@@ -127,4 +133,27 @@ test("new: seen in the last week, but not in the very first check", () => {
   assert.equal(isNew(all[1], all, "2026-11-05"), true);
   assert.equal(isNew(all[1], all, "2026-11-06"), false);
   assert.equal(isNew(all[3], all, TODAY), false);
+});
+
+test("what a check of one bank found, in words", () => {
+  assert.equal(checkWords({ added: 2, updated: 0, gone: 1, failed: 0 }), "2 new, 1 taken down.");
+  assert.equal(checkWords({ added: 0, updated: 0, gone: 0, failed: 1 }), "nothing changed. 1 page didn't load; they'll be read next time.");
+});
+
+test("a new promo whose own page shows it already ended is left out; one we have stays", () => {
+  const ledger: Ledger = { ...emptyLedger(), promos: [promo("kept", { ends: "2026-09-30" })] };
+  const ended = { period: "", starts: "", ends: "2026-09-30", details: "", permit: "" };
+  const list = [listed("kept"), listed("old"), listed("open"), listed("unread")];
+  const details = { kept: ended, old: ended, open: { ...ended, ends: "" } };
+  assert.deepEqual(withoutEnded(ledger, "rcbc", list, details, TODAY).map((l) => l.slug), ["kept", "open", "unread"]);
+});
+
+test("a list with under half the promos we have listed, and more than a handful fewer, looks incomplete", () => {
+  const many = (n: number) => Array.from({ length: n }, (_, i) => promo(`p${i}`));
+  const ledger: Ledger = { ...emptyLedger(), promos: [...many(20), promo("gone", { gone: "2026-10-01" }), promo("mine", { manual: true })] };
+  assert.equal(looksIncomplete(ledger, "rcbc", 9), true);
+  assert.equal(looksIncomplete(ledger, "rcbc", 10), false);
+  assert.equal(looksIncomplete(ledger, "eastwest", 0), false);
+  assert.equal(looksIncomplete({ ...emptyLedger(), promos: many(8) }, "rcbc", 2), true);
+  assert.equal(looksIncomplete({ ...emptyLedger(), promos: many(6) }, "rcbc", 1), false); // a handful ending at once is fine
 });

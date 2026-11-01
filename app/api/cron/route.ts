@@ -1,5 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
-import { importRcbc } from "@/lib/import";
+import { importAll } from "@/lib/import";
 
 export const maxDuration = 300;
 
@@ -13,9 +13,7 @@ function fromVercel(request: Request): boolean {
 
 export async function GET(request: Request) {
   if (!fromVercel(request)) return Response.json({ error: "Not found." }, { status: 404 });
-  try { return Response.json(await importRcbc("daily check")); }
-  catch (error) {
-    console.error(error);
-    return Response.json({ error: (error as Error).message }, { status: 502 });
-  }
+  // Every bank, each saved on its own; a bank that failed makes the run show as failed in Vercel's logs.
+  const checks = await importAll("daily check");
+  return Response.json({ checks }, { status: checks.some((c) => c.error) ? 502 : 200 });
 }

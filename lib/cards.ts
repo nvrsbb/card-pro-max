@@ -13,12 +13,25 @@ export const RCBC_CARDS: KnownCard[] = ([
   ["Flex", "visa", "classic"], ["Classic", "visa", "classic"], ["Classic", "mastercard", "classic"], ["Classic", "jcb", "classic"],
 ] as const).map(([type, network, tier]) => ({ id: cardId("rcbc", type, network), bank: "rcbc", type, network, tier }));
 
-export const knownCard = (id: string) => RCBC_CARDS.find((c) => c.id === id);
+// EastWest's credit cards, as its promo mechanics name them ("EastWest Platinum Mastercard", "EastWest Priority Visa
+// Infinite"): type and network.
+export const EASTWEST_CARDS: KnownCard[] = ([
+  ["Priority Infinite", "visa", "premium"], ["Platinum", "visa", "premium"], ["Platinum", "mastercard", "premium"], ["Platinum", "jcb", "premium"],
+  ["Singapore Airlines KrisFlyer World", "mastercard", "premium"], ["Singapore Airlines KrisFlyer Platinum", "mastercard", "premium"],
+  ["Dolce Vita Titanium", "mastercard", "gold"], ["EveryDay Titanium", "mastercard", "gold"],
+  ["Gold", "visa", "gold"], ["Gold", "mastercard", "gold"], ["Gold", "jcb", "gold"],
+  ["Privilege", "visa", "classic"], ["Privilege", "mastercard", "classic"], ["Puregold Always Panalo", "visa", "classic"], ["foodpanda", "visa", "classic"],
+] as const).map(([type, network, tier]) => ({ id: cardId("eastwest", type, network), bank: "eastwest", type, network, tier }));
 
-/** Every card: ours and others we added, then the bank's cards nobody has tagged yet (not ours), ours first, A to Z. */
+/** Every bank's cards. */
+export const BANK_CARDS: KnownCard[] = [...RCBC_CARDS, ...EASTWEST_CARDS];
+
+export const knownCard = (id: string) => BANK_CARDS.find((c) => c.id === id);
+
+/** Every card: ours and others we added, then every bank's cards nobody has tagged yet (not ours), ours first, A to Z. */
 export function allCards(ledger: Pick<Ledger, "cards">): Card[] {
   const stored = new Set(ledger.cards.map((c) => c.id));
-  const untagged = RCBC_CARDS.filter((k) => !stored.has(k.id)).map(({ id, bank, type, network }): Card => ({ id, bank, type, network, owners: [] }));
+  const untagged = BANK_CARDS.filter((k) => !stored.has(k.id)).map(({ id, bank, type, network }): Card => ({ id, bank, type, network, owners: [] }));
   return [...ledger.cards, ...untagged].sort((a, b) => Number(b.owners.length > 0) - Number(a.owners.length > 0) || cardName(a).localeCompare(cardName(b)));
 }
 
@@ -50,7 +63,7 @@ export function tagOp(ledger: Pick<Ledger, "cards">, card: Card, owners: string[
 /** A card's name by its id ("" for none), whether stored or one of the bank's untagged cards. */
 export function nameOf(ledger: Pick<Ledger, "cards">, id: string): string {
   if (!id) return "";
-  const card = ledger.cards.find((c) => c.id === id) ?? RCBC_CARDS.find((c) => c.id === id);
+  const card = ledger.cards.find((c) => c.id === id) ?? BANK_CARDS.find((c) => c.id === id);
   return card ? cardName(card) : "A removed card";
 }
 

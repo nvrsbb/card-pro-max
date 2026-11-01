@@ -7,11 +7,11 @@ import type { Bank, Card, Kind, Ledger, Network, Promo, Spend, Status, Tracking 
 export function kindOf(title: string, summary = ""): Kind {
   const t = title.toLowerCase();
   const all = `${t} ${summary.toLowerCase()}`;
-  if (/cash ?back|rebate|statement credit/.test(t)) return "cashback";
+  if (/cash ?back|rebate|statement credit|cash credit/.test(t)) return "cashback";
   if (/0% (installment|interest)|installment/.test(t)) return "installment";
   if (/\bwin\b|raffle|draw|sweepstakes/.test(t)) return "raffle";
   if (/rewards? points|bonus points|airmiles|\bmiles\b/.test(t)) return "points";
-  if (/% ?off|₱[\d,]+ ?off|\boff\b|discount|as low as|for only|buy \d+,? get|privileges/.test(t)) return "discount";
+  if (/% ?off|₱[\d,]+ ?off|\boff\b|discount|savings?\b|\bsave\b|as low as|for only|buy \d+,? get|privileges/.test(t)) return "discount";
   if (/free|freebie|gift|complimentary/.test(t)) return "freebie";
   if (/cash ?back|rebate/.test(all)) return "cashback";
   if (/% ?off|discount/.test(all)) return "discount";
@@ -135,20 +135,49 @@ export function describeImport(bankName: string, r: ImportResult): string {
   return `${bankName} promos: ${parts.length ? parts.join(", ") : "no changes"}`;
 }
 
+/** What a check of one bank found, in words: "2 new, 1 taken down", and any pages that didn't load. */
+export function checkWords(r: { added: number; updated: number; gone: number; failed: number }): string {
+  const parts = [[r.added, "new"], [r.updated, "updated"], [r.gone, "taken down"]].filter(([n]) => n).map(([n, w]) => `${n} ${w}`);
+  const failed = r.failed ? ` ${r.failed} page${r.failed === 1 ? "" : "s"} didn't load; they'll be read next time.` : "";
+  return `${parts.length ? parts.join(", ") : "nothing changed"}.${failed}`;
+}
+
 /** How often a listed promo's own page is read again, to catch changed terms and extended dates. */
 export const REREAD_DAYS = 7;
 
 /**
  * Which listed promos need their own page read: new ones, ones whose title or summary changed, ones never read, ones
- * still listed after their end date (likely extended), and ones not read for REREAD_DAYS.
+ * still listed in the week after their end date (likely extended), and ones not read for REREAD_DAYS. One still listed
+ * long after it ended (EastWest leaves them up) is read on the weekly round only.
  */
 export function needsDetail(ledger: Ledger, bank: Bank, listed: Listed[], today: string): string[] {
   const have = new Map(ledger.promos.filter((p) => p.bank === bank).map((p) => [p.slug, p]));
   return listed.filter((l) => {
     const p = have.get(l.slug);
     return !p || p.title !== l.title || p.summary !== l.summary || (!p.details && !p.period)
-      || (!!p.ends && p.ends < today) || daysBetween(p.checked ?? p.updated, today) >= REREAD_DAYS;
+      || (!!p.ends && p.ends < today && daysBetween(p.ends, today) <= REREAD_DAYS) || daysBetween(p.checked ?? p.updated, today) >= REREAD_DAYS;
   }).map((l) => l.slug);
+}
+
+/**
+ * The list without promos new to the catalog whose own page shows they've already ended: banks leave old promos up,
+ * and they aren't news. Ones already in the catalog stay, to be refreshed (or extended).
+ */
+export function withoutEnded<L extends Listed>(ledger: Ledger, bank: Bank, listed: L[], details: Record<string, Detail>, today: string): L[] {
+  const known = new Set(ledger.promos.filter((p) => p.bank === bank).map((p) => p.slug));
+  return listed.filter((l) => known.has(l.slug) || !details[l.slug]?.ends || details[l.slug].ends >= today);
+}
+
+/** Below this many missing, a shorter list is just promos ending; above it and under half, the list is incomplete. */
+export const HANDFUL = 5;
+
+/**
+ * Whether a bank's list looks cut short (a page that didn't render, a changed pager) rather than promos ending: it
+ * has fewer than half the promos we have as listed, and more than a handful fewer.
+ */
+export function looksIncomplete(ledger: Ledger, bank: Bank, listed: number): boolean {
+  const current = ledger.promos.filter((p) => p.bank === bank && !p.gone && !p.manual).length;
+  return current - listed > HANDFUL && listed < current / 2;
 }
 
 export const networksOf = (cards: Card[]): Network[] => [...new Set(cards.map((c) => c.network))];

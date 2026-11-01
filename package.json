@@ -12,7 +12,8 @@
     "import:promos": "node scripts/import.ts",
     "import:rcbc": "node scripts/import.ts rcbc",
     "import:eastwest": "node scripts/import.ts eastwest",
-    "import:bpi": "node scripts/import.ts bpi"
+    "import:bpi": "node scripts/import.ts bpi",
+    "import:metrobank": "node scripts/import.ts metrobank"
   },
   "dependencies": {
     "next": "16.4.1",

@@ -1,4 +1,4 @@
-Card Pro Max tracks credit card promos: each bank's catalog (RCBC, EastWest and BPI), which ones we've joined, spending toward each
+Card Pro Max tracks credit card promos: each bank's catalog (RCBC, EastWest, BPI and Metrobank), which ones we've joined, spending toward each
 minimum, and rewards earned and credited. Everything below applies to every session, including cloud sessions (they
 don't see the owner's Mac, so this file is the whole briefing).
 
@@ -32,10 +32,10 @@ don't see the owner's Mac, so this file is the whole briefing).
   or a local folder in development. `lib/client.ts` is the browser's copy: `mutate(op)` shows an edit at once and saves in order.
 - People (`settings.json` `people`: id, name, login) live in the ledger, never in this repo. Commits end "(by Name)" (`whoIs`).
 - Cards (`lib/cards.ts`): a card is bank + type + network (`cardId`, `cardName`: "RCBC Flex Visa") with `owners` (person ids;
-  none: not ours). `RCBC_CARDS`, `EASTWEST_CARDS` and `BPI_CARDS` (together `BANK_CARDS`) are the banks' lists, shown untagged until someone tags one (`tagOp` adds it then).
+  none: not ours). `RCBC_CARDS`, `EASTWEST_CARDS`, `BPI_CARDS` and `METROBANK_CARDS` (together `BANK_CARDS`) are the banks' lists, shown untagged until someone tags one (`tagOp` adds it then).
   "Our cards" is always `ownedCards`, never `ledger.cards` as a whole.
-- Banks: `BANKS` in `lib/ledger.ts` (RCBC, EastWest, BPI). Each bank has a pure parser (`lib/rcbc.ts`, `lib/eastwest.ts`, `lib/bpi.ts`:
-  `parseList`, `parseDetail`, tested on synthetic HTML shaped like the real pages, never copied pages) and an entry in
+- Banks: `BANKS` in `lib/ledger.ts` (RCBC, EastWest, BPI, Metrobank). Each bank has a pure parser (`lib/rcbc.ts`, `lib/eastwest.ts`, `lib/bpi.ts`,
+  `lib/metrobank.ts`: `parseList`, `parseDetail`, tested on synthetic HTML or JSON shaped like the real pages, never copied pages) and an entry in
   `IMPORTERS` (`lib/import.ts`: how to read its list, a promo's page, and its address). `importAll` checks every bank in
   turn, each saved on its own, and reports per bank; `/api/import`, `/api/cron` and `npm run import:promos` use it.
   `mergeImport` (`lib/promos.ts`) is bank-agnostic. A new bank = a parser + tests, an `IMPORTERS` entry, a `BANKS`
@@ -51,6 +51,14 @@ don't see the owner's Mac, so this file is the whole briefing).
   promo's page gives the mechanics (from "Promo Mechanics" to "Related Information") and usually "The promo runs from
   … to …". Networks only when the title or summary names one ("BPI Visa Credit Card"); a travel visa isn't one.
   FlexipayZero is BPI's 0% installment. Its card names: "BPI Gold Rewards Card", "Petron BPI Card".
+- Metrobank's list (metrobank.com.ph/promos) is one Next.js page, ~12.5 MB, whose `__NEXT_DATA__` JSON
+  (`pageProps.data.promoDetails`) holds every promo it has run (~2,700, ~450 running): slug, title, description, ISO
+  `startDate`/`expirationDate` (Manila time) and `cards[]`, each with `cardTypes` ("Credit Card", "Debit Card",
+  "Prepaid Card"; some untyped). The importer streams it with a size cap (`bigPage`; cut short or too big fails the
+  check), keeps promos with a credit card (or untyped and not debit/prepaid; no cards: text says "credit card") that
+  haven't ended. Networks come from the credit cards' names ("Hype Visa (formerly Vantage Visa)" is Visa; "Toyota
+  Platinum" names none). A promo's page (`/promos/<slug>`, ~100 KB, same `__NEXT_DATA__`) gives the mechanics
+  (`PromoDetailSectionRecord`s) and the permit (`fairTrade`). A first check of all four banks takes about a minute.
 - RCBC's and BPI's images are same-site only (`cross-origin-resource-policy`), so the app doesn't show them.
 - `guessTerms` only starts the Track form; the owner confirms minimum spend and reward. Mechanics vary (tiers, foreign currency).
 - Every route except `/login` and `/api/cron` needs the signed session cookie (`proxy.ts`, checked again in each route).

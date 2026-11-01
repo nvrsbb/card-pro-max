@@ -32,8 +32,19 @@ export const BPI_CARDS: KnownCard[] = ([
   ["Petron", "mastercard", "classic"], ["Robinsons Cashback", "visa", "classic"],
 ] as const).map(([type, network, tier]) => ({ id: cardId("bpi", type, network), bank: "bpi", type, network, tier }));
 
+// Metrobank's credit cards, as its promo list names the cards each promo is for ("Travel Signature Visa", "Hype Visa
+// (formerly Vantage Visa)"): type and network. "Toyota Platinum" names no network there; its mechanics call it the
+// Toyota Platinum Mastercard.
+export const METROBANK_CARDS: KnownCard[] = ([
+  ["World", "mastercard", "premium"], ["Travel Signature", "visa", "premium"], ["Femme Signature", "visa", "premium"],
+  ["Platinum", "mastercard", "premium"], ["Travel Platinum", "visa", "premium"], ["Toyota Platinum", "mastercard", "premium"],
+  ["Titanium", "mastercard", "gold"], ["Cashback", "visa", "gold"], ["Rewards Plus", "visa", "gold"],
+  ["M Free", "mastercard", "classic"], ["Toyota", "mastercard", "classic"], ["Femme", "visa", "classic"], ["Hype", "visa", "classic"],
+  ["Hype", "mastercard", "classic"], ["PSBank Credit", "mastercard", "classic"], ["Dollar", "mastercard", "classic"],
+] as const).map(([type, network, tier]) => ({ id: cardId("metrobank", type, network), bank: "metrobank", type, network, tier }));
+
 /** Every bank's cards. */
-export const BANK_CARDS: KnownCard[] = [...RCBC_CARDS, ...EASTWEST_CARDS, ...BPI_CARDS];
+export const BANK_CARDS: KnownCard[] = [...RCBC_CARDS, ...EASTWEST_CARDS, ...BPI_CARDS, ...METROBANK_CARDS];
 
 export const knownCard = (id: string) => BANK_CARDS.find((c) => c.id === id);
 

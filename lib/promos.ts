@@ -8,7 +8,7 @@ export function kindOf(title: string, summary = ""): Kind {
   const t = title.toLowerCase();
   const all = `${t} ${summary.toLowerCase()}`;
   if (/cash ?back|rebate|statement credit|cash credit/.test(t)) return "cashback";
-  if (/0% (installment|interest)|installment/.test(t)) return "installment";
+  if (/0% (installment|interest)|installment|flexipay ?zero/.test(t)) return "installment";
   if (/\bwin\b|raffle|draw|sweepstakes/.test(t)) return "raffle";
   if (/rewards? points|bonus points|airmiles|\bmiles\b/.test(t)) return "points";
   if (/% ?off|₱[\d,]+ ?off|\boff\b|discount|savings?\b|\bsave\b|as low as|for only|buy \d+,? get|privileges/.test(t)) return "discount";

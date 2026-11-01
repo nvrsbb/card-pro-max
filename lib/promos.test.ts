@@ -13,6 +13,7 @@ test("the kind of promo, from its title", () => {
   assert.equal(kindOf("Special Offers on iPhone Duo", "0% interest for up to 24 months or score up to ₱5,000 CASHBACK!"), "cashback");
   assert.equal(kindOf("10% Cashback in Taiwan with JCB"), "cashback");
   assert.equal(kindOf("0% Installment + Freebie at Asian Home Appliance"), "installment");
+  assert.equal(kindOf("Up to 24 months FlexipayZero at Sample Store"), "installment");
   assert.equal(kindOf("#JCBestofJapan Promo: Win a Luxury Trip to Japan"), "raffle");
   assert.equal(kindOf("RCBC Airmiles Visa Signature Accelerated Airmiles Promo"), "points");
   assert.equal(kindOf("Redeem Rewards Points for PAGSS Lounge Access"), "points");

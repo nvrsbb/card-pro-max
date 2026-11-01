@@ -105,7 +105,7 @@ test("edits from the browser are checked: right shapes pass, anything else is re
   for (const op of good) assert.equal(isOp(op), true, op.type);
   const bad: unknown[] = [
     null, {}, { type: "nope" },
-    { type: "addCard", id: "bpi-x-visa", fields: { bank: "bpi", type: "x", network: "visa", owners: [] } },
+    { type: "addCard", id: "bdo-x-visa", fields: { bank: "bdo", type: "x", network: "visa", owners: [] } },
     { type: "addCard", id: "rcbc-x-visa", fields: { bank: "rcbc", type: "x", network: "visa", owners: [], extra: 1 } },
     { type: "addCard", id: "rcbc-x-visa", fields: { bank: "rcbc", type: "x", network: "visa" } },
     { type: "addCard", id: "anything", fields: { bank: "rcbc", type: "x", network: "visa", owners: [] } },

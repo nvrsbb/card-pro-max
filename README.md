@@ -1,7 +1,7 @@
 # Card Pro Max
 
 Credit card promos worth chasing: what's on for the cards we hold, what we've joined, how far we are toward each
-minimum spend, and the rewards still to come. Banks: **RCBC** and **EastWest**; built so more can follow.
+minimum spend, and the rewards still to come. Banks: **RCBC**, **EastWest** and **BPI**; built so more can follow.
 
 - **Overview**: promos joined (soonest-ending first) with progress toward their minimum spend and a "behind pace"
   note, rewards earned but not yet credited, rewards credited this year, and promos for our cards ending this week.
@@ -12,7 +12,7 @@ minimum spend, and the rewards still to come. Banks: **RCBC** and **EastWest**; 
   Each row says its bank. **Check for new promos** reads every bank's promo page now, one after another, and says
   what changed at each (one bank's site being down doesn't stop the others); it's also checked every morning.
 - **Spending**: everything spent toward a promo's minimum.
-- **Cards**: every RCBC and EastWest card (filter by bank), each tagged by whose it is (Arvs, Ayette, both) or Not ours. Ours decide what Promos
+- **Cards**: every RCBC, EastWest and BPI card (filter by bank), each tagged by whose it is (Arvs, Ayette, both) or Not ours. Ours decide what Promos
   shows (all of ours, or one person's); a card that isn't ours shows what it would get. Add one by bank, type and
   network (RCBC, Flex, Visa: "RCBC Flex Visa").
 - **Settings**: light or dark, who's who (each person and the login they use; their edits say "by" them), and where the data lives.
@@ -26,6 +26,7 @@ This repo is public and holds no personal data. Everything is plain files in a s
 ```
 promos/rcbc.json     the catalog, one file per bank: every promo seen on rcbccredit.com/promos (and any added by hand)
 promos/eastwest.json   … and every credit card promo on eastwestbanker.com/promos
+promos/bpi.json        … and every credit card promo on bpi.com.ph/personal/rewards-and-promotions/promos
 settings.json        {"people": [{"id", "name", "login"}]}   who we are, and which login (admin or member) each uses
 cards.csv            id,bank,type,network,owners                 (owners: person ids, space-separated; none: not ours)
 tracking.csv         promo,status,card,goal,reward,note,updated      (status: watching, joined, earned, credited, skipped)
@@ -38,9 +39,13 @@ Without `LEDGER_REPO` the app uses a local folder (`.ledger/`, or `LEDGER_DIR`) 
 ### How promos come in
 
 Each bank has a parser for its public promo list and each promo's page (pure functions, tested on samples):
-`lib/rcbc.ts` and `lib/eastwest.ts`. EastWest's list is one feed for every product, nine to a page, with years of
+`lib/rcbc.ts`, `lib/eastwest.ts` and `lib/bpi.ts`. EastWest's list is one feed for every product, nine to a page, with years of
 ended promos; the parser keeps the ones tagged for credit cards (or a network only, not debit), and the importer leaves
-out those whose listed period has ended. `lib/import.ts` has an importer per bank and `importAll` checks them in turn,
+out those whose listed period has ended. BPI's list page shows only twelve promos, so its importer reads the JSON its
+Load more button uses, every page of it; it keeps promos tagged "Credit cards" and leaves out those shown as expired
+or past their "Valid until". A BPI promo's page usually states its period ("The promo runs from … to …"), else the
+list's "Valid until" is used; many installment (FlexipayZero) offers have no end date. Networks are only set when the
+promo names one ("BPI Visa Credit Card"); otherwise it's for any BPI card. `lib/import.ts` has an importer per bank and `importAll` checks them in turn,
 each saved on its own; `mergeImport` in `lib/promos.ts` adds new promos, refreshes changed ones, re-reads
 each page weekly (and when a still-listed promo is past its end date, as it was likely extended), and marks promos the
 bank takes down as gone. Untracked promos are dropped 180 days after they end; tracked ones stay.
@@ -68,7 +73,7 @@ npm run dev                # http://localhost:3000, data in .ledger/
 npm test                   # parser, ledger and promo rules
 npx tsc --noEmit -p . && npx eslint .
 npm run import:promos      # check every bank from the command line, into the configured ledger
-npm run import:eastwest    # or one bank (import:rcbc)
+npm run import:eastwest    # or one bank (import:rcbc, import:bpi)
 ```
 
 ## Design

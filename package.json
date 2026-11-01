@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "import:promos": "node scripts/import.ts",
     "import:rcbc": "node scripts/import.ts rcbc",
-    "import:eastwest": "node scripts/import.ts eastwest"
+    "import:eastwest": "node scripts/import.ts eastwest",
+    "import:bpi": "node scripts/import.ts bpi"
   },
   "dependencies": {
     "next": "16.4.1",

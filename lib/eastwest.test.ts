@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { lastPage, listPageUrl, parseDetail, parseList } from "./eastwest.ts";
+import { cardCount, lastPage, listPageUrl, parseDetail, parseList } from "./eastwest.ts";
 
 // Shaped like eastwestbanker.com/promos: one .promo-card per promo, an optional period line under the title, an
 // excerpt, and pills for the category, card type, network and region.
@@ -52,6 +52,8 @@ test("debit-only and deposit promos are left out; a page with none gives none", 
 });
 
 test("the pager says how many pages the list has", () => {
+  assert.equal(cardCount(LIST), 5);
+  assert.equal(cardCount("<html><body>Maintenance</body></html>"), 0);
   assert.equal(lastPage(LIST), 26);
   assert.equal(lastPage(LIST.replace("?page=26", "?field_card_type_target_id=155&amp;page=21")), 21);
   assert.equal(lastPage("<html><body>one page</body></html>"), 0);
@@ -106,4 +108,9 @@ test("with no period on the list, it comes from the summary, then the mechanics"
   assert.deepEqual([fromMechanics.starts, fromMechanics.ends], ["2026-11-01", "2027-05-30"]);
   const none = parseDetail(DETAIL("<p>Ask the merchant for details.</p>"));
   assert.deepEqual([none.period, none.starts, none.ends], ["", "", ""]);
+});
+
+test("a permit written with a space after the hyphen still reads as one", () => {
+  assert.equal(parseDetail(DETAIL("<p>Per DTI Fair Trade Permit No. FTEB- 255368, Series of 2026.</p>")).permit, "FTEB-255368, Series of 2026");
+  assert.equal(parseDetail(DETAIL("<p>Per DTI Fair Trade Permit No. FTEB 255368 Series of 2026.</p>")).permit, "FTEB-255368 Series of 2026");
 });

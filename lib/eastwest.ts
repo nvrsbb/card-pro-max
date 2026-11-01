@@ -45,6 +45,9 @@ export function parseList(html: string): EastWestListed[] {
   return out;
 }
 
+/** How many promos a page of the list shows, of any kind: a page of the list with none didn't render. */
+export const cardCount = (html: string) => html.split(/class="card promo-card"/).length - 1;
+
 /** The list's last page number (the first is 0), from its pager; 0 when there's only one. */
 export function lastPage(html: string): number {
   const last = html.match(/href="\?(?:[^"]*&amp;)?page=(\d+)"[^>]*title="Go to last page"/)?.[1];
@@ -69,6 +72,7 @@ export function parseDetail(html: string, listed = ""): Detail {
   const excerpt = htmlText(html.match(/class="field field--name-field-excerpt[^"]*">([\s\S]*?)<\/div>/)?.[1] ?? "");
   const said = (text: string) => text.match(SAID_PERIOD)?.[1].trim() ?? "";
   const period = listed || said(excerpt) || said(details);
-  const permit = details.match(/(?:DTI|FTEB)[^\n]*?(FTEB[- ]?\d+[^\n]*?\d{4})/i)?.[1] ?? "";
-  return { period, ...parsePeriod(period), details, permit: permit.replace(/\s+/g, " ").trim() };
+  // "FTEB-123456, Series of 2026", also when written "FTEB- 123456" or "FTEB 123456".
+  const permit = details.match(/(?:DTI|FTEB)[^\n]*?FTEB\s*-?\s*(\d+)([^\n]*?\d{4})/i);
+  return { period, ...parsePeriod(period), details, permit: permit ? `FTEB-${permit[1]}${permit[2]}`.replace(/\s+/g, " ").trim() : "" };
 }

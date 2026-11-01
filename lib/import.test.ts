@@ -20,6 +20,12 @@ const DETAIL = `<section class="single-promo"><div class="promo-mechanics-wrap">
   <div class="field field--name-body field--type-text-with-summary field--item"><p>Minimum spend of Php 1,000.</p></div>
 </div></section>`;
 
+const BLANK_PAGE_TWO = (url: string) => {
+  if (url === "https://www.eastwestbanker.com/promos") return new Response(`${LIST}<a href="?page=1" title="Go to last page">Last</a>`);
+  if (url === "https://www.eastwestbanker.com/promos?page=1") return new Response("<html><body>Something went wrong</body></html>");
+  return new Response(DETAIL);
+};
+
 test("one bank failing doesn't stop the others; promos the list shows as ended are left out", async (t) => {
   const dir = await mkdtemp(path.join(tmpdir(), "card-pro-max-"));
   const env = { ...process.env };
@@ -41,4 +47,34 @@ test("one bank failing doesn't stop the others; promos the list shows as ended a
   const saved = JSON.parse(await readFile(path.join(dir, "promos/eastwest.json"), "utf8"));
   assert.deepEqual(saved.map((p: { id: string; ends: string; kind: string; details: string }) => [p.id, p.ends, p.kind, p.details]),
     [["eastwest:sample-savings", "2099-12-31", "discount", "Minimum spend of Php 1,000."]]);
+});
+
+test("an EastWest list page with no promos fails the check and saves nothing", async (t) => {
+  const dir = await mkdtemp(path.join(tmpdir(), "card-pro-max-"));
+  const env = { ...process.env };
+  delete process.env.LEDGER_REPO;
+  process.env.LEDGER_DIR = dir;
+  t.mock.method(globalThis, "fetch", async (url: string) => BLANK_PAGE_TWO(url));
+  t.after(async () => { process.env = env; await rm(dir, { recursive: true, force: true }); });
+
+  const { importAll } = await import("./import.ts");
+  const [eastwest] = await importAll("script", ["eastwest"]);
+  assert.match(eastwest.error ?? "", /page 2 had no promos/);
+  await assert.rejects(readFile(path.join(dir, "promos/eastwest.json"), "utf8"));
+});
+
+test("a new promo whose own page says it already ended isn't added", async (t) => {
+  const dir = await mkdtemp(path.join(tmpdir(), "card-pro-max-"));
+  const env = { ...process.env };
+  delete process.env.LEDGER_REPO;
+  process.env.LEDGER_DIR = dir;
+  const undated = LIST.replace("<p>November 1, 2026 to December 31, 2099</p>", "");
+  t.mock.method(globalThis, "fetch", async (url: string) => new Response(url === "https://www.eastwestbanker.com/promos" ? undated
+    : DETAIL.replace("Minimum spend", "Promo period is from January 1 to 31, 2020. Minimum spend")));
+  t.after(async () => { process.env = env; await rm(dir, { recursive: true, force: true }); });
+
+  const { importAll } = await import("./import.ts");
+  const [eastwest] = await importAll("script", ["eastwest"]);
+  assert.equal(eastwest.error, undefined);
+  assert.equal(eastwest.result?.added, 0);
 });

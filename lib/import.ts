@@ -2,7 +2,7 @@
 import { manilaToday, parsePeriod } from "./dates.ts";
 import * as eastwest from "./eastwest.ts";
 import { BANKS, type Bank } from "./ledger.ts";
-import { needsDetail } from "./promos.ts";
+import { looksIncomplete, needsDetail, withoutEnded } from "./promos.ts";
 import * as rcbc from "./rcbc.ts";
 import type { Detail, Listed } from "./rcbc.ts";
 import { LedgerError, readLedger, saveImport, type ImportSummary } from "./store.ts";
@@ -44,8 +44,12 @@ const IMPORTERS: { [B in Bank]: Importer<Listed> } = {
       const first = await page(eastwest.listPageUrl(0));
       const rest: string[] = [];
       await inTurn(Array.from({ length: eastwest.lastPage(first) }, (_, i) => i + 1), async (n) => { rest[n] = await page(eastwest.listPageUrl(n)); });
+      const pages = [first, ...rest.filter(Boolean)];
+      // Every page of the list has promos on it; one with none didn't render, and its promos would look taken down.
+      const blank = pages.findIndex((html) => eastwest.cardCount(html) === 0);
+      if (blank >= 0) throw new LedgerError(`EastWest's promo list page ${blank + 1} had no promos on it. The site may be down or changed; nothing was saved.`);
       const seen = new Set<string>();
-      return [first, ...rest.filter(Boolean)].flatMap(eastwest.parseList).filter((l) => {
+      return pages.flatMap(eastwest.parseList).filter((l) => {
         const ends = parsePeriod(l.period).ends;
         if (seen.has(l.slug) || (ends && ends < today)) return false;
         seen.add(l.slug);
@@ -70,6 +74,9 @@ export async function importBank(bank: Bank, by: string): Promise<CheckResult> {
   // An empty list is the site down or redesigned, not every promo ending at once: don't mark them all gone.
   if (listed.length === 0) throw new LedgerError(`${BANKS[bank]}'s promo page had no promos on it. The site may be down or changed; nothing was saved.`);
   const { ledger } = await readLedger();
+  if (looksIncomplete(ledger, bank, listed.length)) {
+    throw new LedgerError(`${BANKS[bank]}'s promo list looked incomplete (${listed.length} promos, fewer than half of what it had). Nothing was saved; try again later.`);
+  }
   const wanted = new Set(needsDetail(ledger, bank, listed, today));
   const details: Record<string, Detail> = {};
   let failed = 0;
@@ -77,7 +84,7 @@ export async function importBank(bank: Bank, by: string): Promise<CheckResult> {
     try { details[l.slug] = await source.detail(l); }
     catch { failed += 1; }
   });
-  const { summary } = await saveImport(bank, listed, details, today, source.url, by);
+  const { summary } = await saveImport(bank, withoutEnded(ledger, bank, listed, details, today), details, today, source.url, by);
   return { ...summary, read: Object.keys(details).length, failed };
 }
 

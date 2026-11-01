@@ -147,15 +147,37 @@ export const REREAD_DAYS = 7;
 
 /**
  * Which listed promos need their own page read: new ones, ones whose title or summary changed, ones never read, ones
- * still listed after their end date (likely extended), and ones not read for REREAD_DAYS.
+ * still listed in the week after their end date (likely extended), and ones not read for REREAD_DAYS. One still listed
+ * long after it ended (EastWest leaves them up) is read on the weekly round only.
  */
 export function needsDetail(ledger: Ledger, bank: Bank, listed: Listed[], today: string): string[] {
   const have = new Map(ledger.promos.filter((p) => p.bank === bank).map((p) => [p.slug, p]));
   return listed.filter((l) => {
     const p = have.get(l.slug);
     return !p || p.title !== l.title || p.summary !== l.summary || (!p.details && !p.period)
-      || (!!p.ends && p.ends < today) || daysBetween(p.checked ?? p.updated, today) >= REREAD_DAYS;
+      || (!!p.ends && p.ends < today && daysBetween(p.ends, today) <= REREAD_DAYS) || daysBetween(p.checked ?? p.updated, today) >= REREAD_DAYS;
   }).map((l) => l.slug);
+}
+
+/**
+ * The list without promos new to the catalog whose own page shows they've already ended: banks leave old promos up,
+ * and they aren't news. Ones already in the catalog stay, to be refreshed (or extended).
+ */
+export function withoutEnded<L extends Listed>(ledger: Ledger, bank: Bank, listed: L[], details: Record<string, Detail>, today: string): L[] {
+  const known = new Set(ledger.promos.filter((p) => p.bank === bank).map((p) => p.slug));
+  return listed.filter((l) => known.has(l.slug) || !details[l.slug]?.ends || details[l.slug].ends >= today);
+}
+
+/** Below this many missing, a shorter list is just promos ending; above it and under half, the list is incomplete. */
+export const HANDFUL = 5;
+
+/**
+ * Whether a bank's list looks cut short (a page that didn't render, a changed pager) rather than promos ending: it
+ * has fewer than half the promos we have as listed, and more than a handful fewer.
+ */
+export function looksIncomplete(ledger: Ledger, bank: Bank, listed: number): boolean {
+  const current = ledger.promos.filter((p) => p.bank === bank && !p.gone && !p.manual).length;
+  return current - listed > HANDFUL && listed < current / 2;
 }
 
 export const networksOf = (cards: Card[]): Network[] => [...new Set(cards.map((c) => c.network))];

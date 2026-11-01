@@ -3,12 +3,15 @@ import { daysBetween } from "./dates.ts";
 import type { Detail, Listed } from "./rcbc.ts";
 import type { Bank, Card, Kind, Ledger, Network, Promo, Spend, Status, Tracking } from "./ledger.ts";
 
+/** BPI's words for a 0% installment: FlexipayZero, Flexipay, "0% SIP" (straight installment plan). */
+const INSTALLMENT = /0% s\.?i\.?p\b|flexipay ?zero|flexipay|0% interest on installment/;
+
 /** The kind of promo, from how the bank names it. The first that fits wins: "0% installment + freebie" is installment. */
 export function kindOf(title: string, summary = ""): Kind {
   const t = title.toLowerCase();
   const all = `${t} ${summary.toLowerCase()}`;
   if (/cash ?back|rebate|statement credit|cash credit/.test(t)) return "cashback";
-  if (/0% (installment|interest)|installment|flexipay ?zero/.test(t)) return "installment";
+  if (/0% (installment|interest)|installment|flexipay ?zero/.test(t) || INSTALLMENT.test(all)) return "installment";
   if (/\bwin\b|raffle|draw|sweepstakes/.test(t)) return "raffle";
   if (/rewards? points|bonus points|airmiles|\bmiles\b/.test(t)) return "points";
   if (/% ?off|₱[\d,]+ ?off|\boff\b|discount|savings?\b|\bsave\b|as low as|for only|buy \d+,? get|privileges/.test(t)) return "discount";
@@ -89,9 +92,12 @@ export type ImportResult = { promos: Promo[]; added: string[]; updated: string[]
 /**
  * The catalog after a check of the bank's list: new promos are added (dated today), listed ones refreshed (with their
  * page when it was read), and ones no longer listed marked gone. Promos we never tracked are dropped KEEP_DAYS after
- * they ended or went. Promos added by hand are left alone.
+ * they ended or went. Promos added by hand are left alone. Promos whose page was `tried` but didn't load are marked
+ * checked all the same, so a page that never loads is tried again weekly, not on every check.
  */
-export function mergeImport(ledger: Ledger, bank: Bank, listed: Listed[], details: Record<string, Detail>, today: string, url: (slug: string) => string): ImportResult {
+export function mergeImport(ledger: Ledger, bank: Bank, listed: Listed[], details: Record<string, Detail>, today: string, url: (slug: string) => string,
+  tried: string[] = []): ImportResult {
+  const attempted = new Set(tried);
   const result: ImportResult = { promos: [], added: [], updated: [], gone: [], removed: [] };
   const here = new Map(listed.map((l) => [l.slug, l]));
   const known = new Set<string>();
@@ -113,7 +119,7 @@ export function mergeImport(ledger: Ledger, bank: Bank, listed: Listed[], detail
       ...(d ? { period: d.period, starts: d.starts, ends: d.ends, details: d.details, permit: d.permit } : {}) };
     delete next.gone;
     if (JSON.stringify(next) !== JSON.stringify(p)) { next.updated = today; result.updated.push(p.id); }
-    if (d) next.checked = today;
+    if (d || attempted.has(p.slug)) next.checked = today;
     result.promos.push(next);
   }
   for (const l of listed) {
@@ -123,7 +129,7 @@ export function mergeImport(ledger: Ledger, bank: Bank, listed: Listed[], detail
     result.added.push(id);
     result.promos.push({ id, bank, slug: l.slug, title: l.title, summary: l.summary, url: url(l.slug), image: l.image, networks: l.networks,
       kind: kindOf(l.title, l.summary), period: d.period, starts: d.starts, ends: d.ends, permit: d.permit, details: d.details, added: today, updated: today,
-      ...(details[l.slug] ? { checked: today } : {}) });
+      ...(details[l.slug] || attempted.has(l.slug) ? { checked: today } : {}) });
   }
   return result;
 }
@@ -138,7 +144,7 @@ export function describeImport(bankName: string, r: ImportResult): string {
 /** What a check of one bank found, in words: "2 new, 1 taken down", and any pages that didn't load. */
 export function checkWords(r: { added: number; updated: number; gone: number; failed: number }): string {
   const parts = [[r.added, "new"], [r.updated, "updated"], [r.gone, "taken down"]].filter(([n]) => n).map(([n, w]) => `${n} ${w}`);
-  const failed = r.failed ? ` ${r.failed} page${r.failed === 1 ? "" : "s"} didn't load; they'll be read next time.` : "";
+  const failed = r.failed ? ` ${r.failed} page${r.failed === 1 ? "" : "s"} didn't load; they'll be tried again next week.` : "";
   return `${parts.length ? parts.join(", ") : "nothing changed"}.${failed}`;
 }
 
@@ -146,7 +152,7 @@ export function checkWords(r: { added: number; updated: number; gone: number; fa
 export const REREAD_DAYS = 7;
 
 /**
- * Which listed promos need their own page read: new ones, ones whose title or summary changed, ones never read, ones
+ * Which listed promos need their own page read: new ones, ones whose title or summary changed, ones never tried, ones
  * still listed in the week after their end date (likely extended), and ones not read for REREAD_DAYS. One still listed
  * long after it ended (EastWest leaves them up) is read on the weekly round only.
  */
@@ -154,7 +160,7 @@ export function needsDetail(ledger: Ledger, bank: Bank, listed: Listed[], today:
   const have = new Map(ledger.promos.filter((p) => p.bank === bank).map((p) => [p.slug, p]));
   return listed.filter((l) => {
     const p = have.get(l.slug);
-    return !p || p.title !== l.title || p.summary !== l.summary || (!p.details && !p.period)
+    return !p || p.title !== l.title || p.summary !== l.summary || (!p.details && !p.period && !p.checked)
       || (!!p.ends && p.ends < today && daysBetween(p.ends, today) <= REREAD_DAYS) || daysBetween(p.checked ?? p.updated, today) >= REREAD_DAYS;
   }).map((l) => l.slug);
 }

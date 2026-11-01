@@ -123,3 +123,27 @@ test("a BPI list page with no promos fails the check and saves nothing", async (
   assert.match(bpi.error ?? "", /BPI's promo list page 2 had no promos/);
   await assert.rejects(readFile(path.join(dir, "promos/bpi.json"), "utf8"));
 });
+
+test("a promo page that won't load is tried once, then left for the weekly round", async (t) => {
+  const dir = await mkdtemp(path.join(tmpdir(), "card-pro-max-"));
+  const env = { ...process.env };
+  delete process.env.LEDGER_REPO;
+  process.env.LEDGER_DIR = dir;
+  let detailReads = 0;
+  t.mock.method(globalThis, "fetch", async (url: string) => {
+    if (url === `${BPI_JSON}?sort=newest&page=1`) return new Response(bpiPage(1, [bpiArticle("loops-forever", "")]));
+    detailReads += 1;
+    throw new TypeError("redirect count exceeded");
+  });
+  t.after(async () => { process.env = env; await rm(dir, { recursive: true, force: true }); });
+
+  const { importAll } = await import("./import.ts");
+  const [first] = await importAll("script", ["bpi"]);
+  assert.deepEqual(first.result && [first.result.added, first.result.failed], [1, 1]);
+  const [second] = await importAll("script", ["bpi"]);
+  assert.deepEqual(second.result && [second.result.read, second.result.failed], [0, 0]);
+  assert.equal(detailReads, 1);
+  const [saved] = JSON.parse(await readFile(path.join(dir, "promos/bpi.json"), "utf8"));
+  assert.equal(saved.details, "");
+  assert.ok(saved.checked);
+});

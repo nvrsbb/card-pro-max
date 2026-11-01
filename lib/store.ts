@@ -154,12 +154,12 @@ export type ImportSummary = { added: number; updated: number; gone: number; remo
  * fetched before (lib/import.ts), so a retry doesn't fetch again. `by` is a login, or what ran it ("daily check").
  */
 export async function saveImport(bank: Bank, listed: Listed[], details: Record<string, Detail>, today: string, url: (slug: string) => string,
-  by: string): Promise<{ ledger: Ledger; summary: ImportSummary }> {
+  by: string, tried: string[] = []): Promise<{ ledger: Ledger; summary: ImportSummary }> {
   const store = backend();
   for (let attempt = 0; attempt < 4; attempt++) {
     const { files, version } = await store.read();
     const before = fromFiles(files);
-    const result = mergeImport(before, bank, listed, details, today, url);
+    const result = mergeImport(before, bank, listed, details, today, url, tried);
     const next = { ...before, promos: result.promos };
     const summary = { added: result.added.length, updated: result.updated.length, gone: result.gone.length, removed: result.removed.length };
     const changed = changedFiles(files, toFiles(next));

@@ -93,7 +93,7 @@ export type CheckResult = ImportSummary & { read: number; failed: number };
 
 /**
  * Reads a bank's list, then the pages of promos that are new, changed or due a re-read, and merges them into the
- * catalog. A page that fails to load is skipped (its promo is still listed, and read next time).
+ * catalog. A page that fails to load is skipped (its promo is still listed, and tried again on the weekly round).
  */
 export async function importBank(bank: Bank, by: string): Promise<CheckResult> {
   const source = IMPORTERS[bank];
@@ -107,13 +107,13 @@ export async function importBank(bank: Bank, by: string): Promise<CheckResult> {
   }
   const wanted = new Set(needsDetail(ledger, bank, listed, today));
   const details: Record<string, Detail> = {};
-  let failed = 0;
+  const tried: string[] = [];
   await inTurn(listed.filter((l) => wanted.has(l.slug)), async (l) => {
     try { details[l.slug] = await source.detail(l); }
-    catch { failed += 1; }
+    catch { tried.push(l.slug); }
   });
-  const { summary } = await saveImport(bank, withoutEnded(ledger, bank, listed, details, today), details, today, source.url, by);
-  return { ...summary, read: Object.keys(details).length, failed };
+  const { summary } = await saveImport(bank, withoutEnded(ledger, bank, listed, details, today), details, today, source.url, by, tried);
+  return { ...summary, read: Object.keys(details).length, failed: tried.length };
 }
 
 /** What a check found at one bank: what changed, or why it couldn't be checked. */

@@ -43,7 +43,7 @@ test("one bank failing doesn't stop the others; promos the list shows as ended a
   const [rcbc, eastwest] = await importAll("script");
   assert.equal(rcbc.bank, "rcbc");
   assert.match(rcbc.error ?? "", /answered 503/);
-  assert.deepEqual(eastwest, { bank: "eastwest", result: { added: 1, updated: 0, gone: 0, removed: 0, read: 1, failed: 0 } });
+  assert.deepEqual(eastwest, { bank: "eastwest", result: { added: 1, updated: 0, gone: 0, removed: 0, read: 1, failed: 0, later: 0 } });
   const saved = JSON.parse(await readFile(path.join(dir, "promos/eastwest.json"), "utf8"));
   assert.deepEqual(saved.map((p: { id: string; ends: string; kind: string; details: string }) => [p.id, p.ends, p.kind, p.details]),
     [["eastwest:sample-savings", "2099-12-31", "discount", "Minimum spend of Php 1,000."]]);
@@ -101,7 +101,7 @@ test("BPI's list is read page by page; promos it shows as expired or past their 
 
   const { importAll } = await import("./import.ts");
   const [bpi] = await importAll("script", ["bpi"]);
-  assert.deepEqual(bpi, { bank: "bpi", result: { added: 2, updated: 0, gone: 0, removed: 0, read: 2, failed: 0 } });
+  assert.deepEqual(bpi, { bank: "bpi", result: { added: 2, updated: 0, gone: 0, removed: 0, read: 2, failed: 0, later: 0 } });
   const saved = JSON.parse(await readFile(path.join(dir, "promos/bpi.json"), "utf8"));
   assert.deepEqual(saved.map((p: { id: string; ends: string; url: string }) => [p.id, p.ends, p.url]), [
     ["bpi:sample-cafe", "2099-12-31", "https://www.bpi.com.ph/personal/rewards-and-promotions/promos/sample-cafe"],
@@ -146,4 +146,77 @@ test("a promo page that won't load is tried once, then left for the weekly round
   const [saved] = JSON.parse(await readFile(path.join(dir, "promos/bpi.json"), "utf8"));
   assert.equal(saved.details, "");
   assert.ok(saved.checked);
+});
+
+// Metrobank's list is one Next.js page with every promo it has run as JSON; a promo's page has its mechanics the same way.
+const mbRecord = (slug: string, ends: string, types = ["Credit Card"]) => ({ slug: `/${slug}`, title: slug, description: "Enjoy 15% off.", startDate: "2026-10-01T00:00:00+08:00",
+  expirationDate: ends, cards: [{ title: "Titanium Mastercard", cardTypes: types.map((name) => ({ name })) }] });
+const nextPage = (data: object) => `<html><body><script id="__NEXT_DATA__" type="application/json">${JSON.stringify({ props: { pageProps: { data } } })}</script></body></html>`;
+const MB_LIST = nextPage({ promoDetails: [mbRecord("sample-cafe", "2099-12-31T23:59:59+08:00"), mbRecord("old-cafe", "2020-01-31T23:59:59+08:00"), mbRecord("debit-cafe", "2099-12-31T23:59:59+08:00", ["Debit Card"])] });
+const MB_DETAIL = nextPage({ promosDetailsPageV2: { pageContent: [{ __typename: "PromoDetailSectionRecord", title: "<h2>Promo Mechanics</h2>", details: "<p>Minimum spend of PHP 1,500.</p>" }] } });
+
+/** A response whose body sends `text` in pieces, then breaks off after `upTo` pieces if given. */
+function streamed(text: string, upTo?: number): Response {
+  const bytes = new TextEncoder().encode(text);
+  const step = Math.ceil(bytes.length / 4);
+  let sent = 0;
+  return new Response(new ReadableStream({
+    pull(c) {
+      if (upTo !== undefined && sent === upTo) return c.error(new Error("connection reset"));
+      if (sent * step >= bytes.length) return c.close();
+      c.enqueue(bytes.slice(sent * step, (sent + 1) * step));
+      sent += 1;
+    },
+  }));
+}
+
+test("Metrobank's list is one page of JSON: credit card promos that haven't ended come in, with their mechanics", async (t) => {
+  const dir = await mkdtemp(path.join(tmpdir(), "card-pro-max-"));
+  const env = { ...process.env };
+  delete process.env.LEDGER_REPO;
+  process.env.LEDGER_DIR = dir;
+  t.mock.method(globalThis, "fetch", async (url: string) => url === "https://www.metrobank.com.ph/promos" ? streamed(MB_LIST)
+    : url.startsWith("https://www.metrobank.com.ph/promos/") ? new Response(MB_DETAIL) : new Response("not found", { status: 404 }));
+  t.after(async () => { process.env = env; await rm(dir, { recursive: true, force: true }); });
+
+  const { importAll } = await import("./import.ts");
+  const [metrobank] = await importAll("script", ["metrobank"]);
+  assert.deepEqual(metrobank, { bank: "metrobank", result: { added: 1, updated: 0, gone: 0, removed: 0, read: 1, failed: 0, later: 0 } });
+  const saved = JSON.parse(await readFile(path.join(dir, "promos/metrobank.json"), "utf8"));
+  assert.deepEqual(saved.map((p: { id: string; ends: string; networks: string[]; details: string; url: string }) => [p.id, p.ends, p.networks, p.details, p.url]), [
+    ["metrobank:sample-cafe", "2099-12-31", ["mastercard"], "Promo Mechanics\nMinimum spend of PHP 1,500.", "https://www.metrobank.com.ph/promos/sample-cafe"],
+  ]);
+});
+
+test("a Metrobank list that stops part way fails the check and saves nothing", async (t) => {
+  const dir = await mkdtemp(path.join(tmpdir(), "card-pro-max-"));
+  const env = { ...process.env };
+  delete process.env.LEDGER_REPO;
+  process.env.LEDGER_DIR = dir;
+  t.mock.method(globalThis, "fetch", async (url: string) => url === "https://www.metrobank.com.ph/promos" ? streamed(MB_LIST, 2) : new Response(MB_DETAIL));
+  t.after(async () => { process.env = env; await rm(dir, { recursive: true, force: true }); });
+
+  const { importAll } = await import("./import.ts");
+  const [metrobank] = await importAll("script", ["metrobank"]);
+  assert.match(metrobank.error ?? "", /stopped loading part way/);
+  await assert.rejects(readFile(path.join(dir, "promos/metrobank.json"), "utf8"));
+});
+
+test("out of time, new promos not yet read wait for the next check; they keep the list's dates if their page fails", async (t) => {
+  const dir = await mkdtemp(path.join(tmpdir(), "card-pro-max-"));
+  const env = { ...process.env };
+  delete process.env.LEDGER_REPO;
+  process.env.LEDGER_DIR = dir;
+  const list = nextPage({ promoDetails: [mbRecord("sample-cafe", "2099-12-31T23:59:59+08:00")] });
+  t.mock.method(globalThis, "fetch", async (url: string) => url === "https://www.metrobank.com.ph/promos" ? new Response(list) : new Response("down", { status: 503 }));
+  t.after(async () => { process.env = env; await rm(dir, { recursive: true, force: true }); });
+
+  const { importAll, importBank } = await import("./import.ts");
+  assert.deepEqual(await importBank("metrobank", "script", Date.now() - 1), { added: 0, updated: 0, gone: 0, removed: 0, read: 0, failed: 0, later: 1 });
+  const [skipped] = await importAll("script", ["metrobank"], -1);
+  assert.match(skipped.error ?? "", /wasn't time to check Metrobank/);
+  const [failed] = await importAll("script", ["metrobank"]);
+  assert.deepEqual(failed.result && [failed.result.added, failed.result.failed], [1, 1]);
+  const [saved] = JSON.parse(await readFile(path.join(dir, "promos/metrobank.json"), "utf8"));
+  assert.deepEqual([saved.starts, saved.ends, saved.details], ["2026-10-01", "2099-12-31", ""]);
 });

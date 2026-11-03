@@ -154,6 +154,7 @@ test("new: seen in the last week, but not in the very first check", () => {
 test("what a check of one bank found, in words", () => {
   assert.equal(checkWords({ added: 2, updated: 0, gone: 1, failed: 0 }), "2 new, 1 taken down.");
   assert.equal(checkWords({ added: 0, updated: 0, gone: 0, failed: 1 }), "nothing changed. 1 page didn't load; they'll be tried again next week.");
+  assert.equal(checkWords({ added: 3, updated: 0, gone: 0, failed: 0, later: 2 }), "3 new. 2 more new promos will come in on the next check.");
 });
 
 test("a new promo whose own page shows it already ended is left out; one we have stays", () => {

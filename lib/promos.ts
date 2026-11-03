@@ -1,5 +1,5 @@
 // What the catalog and our records say together: which promos are on, which fit our cards, how far we are.
-import { daysBetween } from "./dates.ts";
+import { daysBetween, parsePeriod } from "./dates.ts";
 import type { Detail, Listed } from "./rcbc.ts";
 import type { Bank, Card, Kind, Ledger, Network, Promo, Spend, Status, Tracking } from "./ledger.ts";
 
@@ -124,7 +124,9 @@ export function mergeImport(ledger: Ledger, bank: Bank, listed: Listed[], detail
   }
   for (const l of listed) {
     if (known.has(l.slug)) continue;
-    const d = details[l.slug] ?? { period: "", starts: "", ends: "", details: "", permit: "" };
+    // A page that didn't load still has the period the list gave, if it gave one.
+    const listedPeriod = (l as Listed & { period?: string }).period ?? "";
+    const d = details[l.slug] ?? { period: listedPeriod, ...parsePeriod(listedPeriod), details: "", permit: "" };
     const id = `${bank}:${l.slug}`;
     result.added.push(id);
     result.promos.push({ id, bank, slug: l.slug, title: l.title, summary: l.summary, url: url(l.slug), image: l.image, networks: l.networks,
@@ -142,10 +144,11 @@ export function describeImport(bankName: string, r: ImportResult): string {
 }
 
 /** What a check of one bank found, in words: "2 new, 1 taken down", and any pages that didn't load. */
-export function checkWords(r: { added: number; updated: number; gone: number; failed: number }): string {
+export function checkWords(r: { added: number; updated: number; gone: number; failed: number; later?: number }): string {
   const parts = [[r.added, "new"], [r.updated, "updated"], [r.gone, "taken down"]].filter(([n]) => n).map(([n, w]) => `${n} ${w}`);
   const failed = r.failed ? ` ${r.failed} page${r.failed === 1 ? "" : "s"} didn't load; they'll be tried again next week.` : "";
-  return `${parts.length ? parts.join(", ") : "nothing changed"}.${failed}`;
+  const later = r.later ? ` ${r.later} more new promo${r.later === 1 ? "" : "s"} will come in on the next check.` : "";
+  return `${parts.length ? parts.join(", ") : "nothing changed"}.${failed}${later}`;
 }
 
 /** How often a listed promo's own page is read again, to catch changed terms and extended dates. */
